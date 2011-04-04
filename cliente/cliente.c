@@ -5,11 +5,13 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h> 
+#include <unistd.h>
+
 #define TAM 256
 
 int main( int argc, char *argv[] ) 
 {
-	int sockfd, puerto, n;
+	int sockfd, puerto;
 	struct sockaddr_in serv_addr;
 	struct hostent *server;
 
@@ -76,5 +78,11 @@ int main( int argc, char *argv[] )
 		fgets(buffer, TAM-1, stdin);
 	}
 	puts("Hasta la proxima, baby..");
+	if (write(sockfd, buffer, strlen(buffer)) < 0) 
+	{
+		perror("write");
+		exit(EXIT_FAILURE);
+	}
+
 	exit(EXIT_SUCCESS);
 } 

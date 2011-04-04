@@ -1,28 +1,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 #include <sys/types.h> 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <unistd.h>
+#include <arpa/inet.h>
 
-#define TAM 256
-#define MAX_QUE 10
-#define EX_REGCLI 0
-#define ERR_REGCLI -1
-#define ERR_COM 1
+#include "servidor.h"
 
-int verificar_msj(char* entrada);
-int registrar_usuario(char *nombre);
-int archivo_agregar(char* nombre_archivo, char* texto);
-int buscar(char *nombre, char *cadena);
-
-int main( int argc, char *argv[] ) 
+int main(int argc, char *argv[]) 
 {
-	int sockfd, newsockfd, puerto, clilen, pid;
-	char buffer[TAM];
+	int sockfd, newsockfd, puerto, pid;
+	size_t clilen;
+	char buffer[TAM];//, com_control[32];
 	char ipstr[INET_ADDRSTRLEN];
 	struct sockaddr_in serv_addr, cli_addr;
-	int n, port;
+	//int n, port;
 
 	/* if ( argc < 2 ) {
         	fprintf( stderr, "Uso: %s <puerto>\n", argv[0] );
@@ -57,7 +52,8 @@ int main( int argc, char *argv[] )
 
 	clilen = sizeof(cli_addr);
 
-	while (1)
+//	while(strcmp(com_control,"exit\n") != 0)
+	while(1)
 	{
 		newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
 		if ( newsockfd < 0 ) 
@@ -90,24 +86,17 @@ int main( int argc, char *argv[] )
 			getpeername(newsockfd, (struct sockaddr*) &cli_addr, &clilen);
 
 			struct sockaddr_in *s = (struct sockaddr_in *) &cli_addr;
-			//port = ntohs(s->sin_port);
-			//inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr);
 
 			while (strcmp(buffer,"CTRL exit\n") != 0)
 			{
-/*
-				printf( "usr: %s", buffer);
-				n = write( newsockfd, "OK", 18 );
-				if ( n < 0 ) {
-					perror("write");
-					exit(EXIT_FAILURE);
-				}
-*/
-				printf( "usr: %s:%d dice:%s", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
+				printf("%s:%d say:%s", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
 				switch (verificar_msj(buffer))
 				{
 					case EX_REGCLI:
 						write (newsockfd, "OK", 18);
+						break;
+					case LISTAR_CLI:
+						write(newsockfd, archivo_listar("clientes"), TAM);
 						break;
 					case ERR_REGCLI:
 						write (newsockfd, "ERROR", 18);
@@ -116,6 +105,8 @@ int main( int argc, char *argv[] )
 						write (newsockfd, "ERROR COMANDO", 18);
 						break;
 				}
+
+				memset(buffer, 0, TAM);
 				if (read(newsockfd, buffer, TAM-1) < 0) 
 				{
 					perror("read");
@@ -128,13 +119,14 @@ int main( int argc, char *argv[] )
 		}
 		else
 			close(newsockfd);
+
 	}
 	exit(EXIT_SUCCESS); 
 }
 
 int verificar_msj(char* entrada)
 {
-	char* ptr;
+	//char* ptr;
 	if (strstr(entrada,"CTRL HOLA\n")!=NULL)
 	{
 		if (registrar_usuario(strtok(entrada," ")) < 0)
@@ -142,11 +134,9 @@ int verificar_msj(char* entrada)
 		else
 			return EX_REGCLI;
 	}
-/*	if (strstr(entrada,"CTRL LISTAR")!=NULL)
-	{
-		
-	}
-	if (strstr(entrada,"CTRL CHARLEMOS")!=NULL)
+	if (strstr(entrada,"CTRL LISTAR\n")!=NULL)
+		return LISTAR_CLI;
+/*	if (strstr(entrada,"CTRL CHARLEMOS")!=NULL)
 	{
 		
 	}
@@ -169,7 +159,7 @@ int verificar_msj(char* entrada)
 
 int registrar_usuario(char *nombre)
 {
-	if (buscar("clientes",nombre) == 0)
+	if (archivo_buscar("clientes",nombre) == 0)
 	{
 		if(archivo_agregar("clientes", nombre) < 0)
 			return -1;
@@ -189,15 +179,16 @@ int archivo_agregar(char* nombre_archivo, char* texto)
 		return -1;		
 	}
 
-	fputs(texto,pf);
+	fputs(strcat(texto,"\n"),pf);
 	fclose(pf);
 	return 0;
 }
 
-int buscar(char *nombre, char *cadena)
+int archivo_buscar(char *nombre, char *cadena)
 {
-	FILE *pf;
+//	FILE *pf;
 	char * buffer;
+/*
 	long lsize;
 	size_t result;
 
@@ -225,16 +216,53 @@ int buscar(char *nombre, char *cadena)
 		fclose(pf);
 		return -1;
 	}
+*/
+	buffer = archivo_listar(nombre);
 
 	if (strstr(buffer,cadena) == NULL)
 	{
-		fclose(pf);
+		//fclose(pf);
 		return 0;
 	}
 	else
 	{
-		fclose(pf); 
+		//fclose(pf); 
 		return 1;
 	}
 	return -1;
+}
+
+char* archivo_listar(char* nombre)
+{
+	FILE *pf;
+	char * buffer;
+	long lsize;
+	size_t result;
+
+	pf = fopen(nombre, "r");
+	if (pf==NULL) 
+	{
+		fclose(pf);
+		return NULL;		
+	}
+
+	fseek (pf, 0, SEEK_END);
+  	lsize = ftell (pf);
+	rewind (pf);
+
+	buffer = (char*) malloc (sizeof(char)*lsize);
+	if (buffer == NULL)
+	{
+		fclose(pf);
+		return NULL;
+	}
+
+	result = fread (buffer,1,lsize,pf);
+	if (result != lsize)
+	{
+		fclose(pf);
+		return NULL;
+	}
+	
+	return buffer;
 }
