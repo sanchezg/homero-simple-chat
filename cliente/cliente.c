@@ -54,8 +54,8 @@ int main( int argc, char *argv[] )
 	}
 
 	printf("ingrese msj inicial: ");
-	memset( buffer, '0', TAM );
-	fgets( buffer, TAM-1, stdin );
+	memset(buffer, '0', TAM);
+	fgets(buffer, TAM-1, stdin);
 
 	while (strcmp(buffer,"CTRL exit\n") != 0)
 	{
@@ -72,7 +72,7 @@ int main( int argc, char *argv[] )
 			perror("read");
 			exit(EXIT_FAILURE);
 		}
-		printf("srv dice: %s\n", buffer);
+		printf("srv: %s\n", buffer);
 		printf("usr: ");
 		memset(buffer, '0', TAM);
 		fgets(buffer, TAM-1, stdin);

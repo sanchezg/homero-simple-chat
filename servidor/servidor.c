@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <time.h>
 
 #include "servidor.h"
 
@@ -14,9 +15,13 @@ int main(int argc, char *argv[])
 {
 	int sockfd, newsockfd, puerto, pid;
 	size_t clilen;
-	char buffer[TAM];//, com_control[32];
+	char buffer[TAM], buffer_compartido[TAM];//, com_control[32];
 	char ipstr[INET_ADDRSTRLEN];
 	struct sockaddr_in serv_addr, cli_addr;
+
+	time_t rawtime;
+	struct tm * fechahora;
+
 	//int n, port;
 
 	/* if ( argc < 2 ) {
@@ -93,7 +98,11 @@ int main(int argc, char *argv[])
 				switch (verificar_msj(buffer))
 				{
 					case EX_REGCLI:
-						write (newsockfd, "OK", 18);
+						write (newsockfd, "QUETAL", 18);
+						memset(buffer_compartido, 0, TAM);
+						time(&rawtime);
+						fechahora=localtime(&rawtime);
+						strcat(strcat(strcat(buffer_compartido,"CLIREG|"),ipstr),asctime(fechahora));
 						break;
 					case LISTAR_CLI:
 						write(newsockfd, archivo_listar("clientes"), TAM);
@@ -118,8 +127,17 @@ int main(int argc, char *argv[])
 			exit(EXIT_SUCCESS);
 		}
 		else
+		{
+			//Proceso servidor, compartir recursos..
 			close(newsockfd);
 
+			memset(buffer_compartido, 0, TAM);
+			if (read(newsockfd, buffer_compartido, TAM-1) < 0) 
+			{
+				perror("read");
+				exit(EXIT_FAILURE);
+			}
+		}
 	}
 	exit(EXIT_SUCCESS); 
 }
@@ -140,7 +158,8 @@ int verificar_msj(char* entrada)
 	{
 		
 	}
-	if (strstr(entrada,"CTRL NO")!=NULL)
+*/
+/*	if (strstr(entrada,"CTRL NO")!=NULL)
 	{
 		
 	}
