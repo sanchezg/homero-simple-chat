@@ -11,61 +11,36 @@
 
 #include "servidor.h"
 
+int iniciar_servidor (int puerto);
+int aceptar_conexion(int des_servidor);
+
 int main(int argc, char *argv[]) 
 {
-	int sockfd, newsockfd, puerto, pid;
+	int des_servidor, des_cliente, pid, pipe_envio[2];
 	size_t clilen;
 	char buffer[TAM], buffer_compartido[TAM];//, com_control[32];
 	char ipstr[INET_ADDRSTRLEN];
-	struct sockaddr_in serv_addr, cli_addr;
+	struct sockaddr_in cli_addr;
+	struct sockaddr_in* s;
 
 	time_t rawtime;
 	struct tm * fechahora;
 
-	//int n, port;
-
-	/* if ( argc < 2 ) {
-        	fprintf( stderr, "Uso: %s <puerto>\n", argv[0] );
-		exit( 1 );
-	} */
-
-	sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	if (sockfd < 0)
-	{ 
-		perror("socket");
-		exit(EXIT_FAILURE);
-	}
-
-	memset( &serv_addr, 0, sizeof(serv_addr));
-	puerto = 6666;
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_addr.s_addr = INADDR_ANY;
-	serv_addr.sin_port = htons( puerto );
-
-	if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+	if (argc < 2)
 	{
-		perror("bind");
-		exit(EXIT_FAILURE);
+       	fprintf (stderr, "Uso: %s <puerto>\n", argv[0] );
+		exit (1);
 	}
-	printf ("srv disponible, puerto %d\n", ntohs(serv_addr.sin_port));
 
-	if(listen (sockfd, MAX_QUE) < 0)
-	{
-		perror("listen");
-		exit(EXIT_FAILURE);
-	}
+	des_servidor = iniciar_servidor(atoi(argv[1]));
 
 	clilen = sizeof(cli_addr);
 
-//	while(strcmp(com_control,"exit\n") != 0)
 	while(1)
 	{
-		newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
-		if ( newsockfd < 0 ) 
-		{
-			perror("accept");
-			exit(EXIT_FAILURE);
-		}
+		des_cliente = aceptar_conexion(des_servidor);
+
+		pipe(pipe_envio);
 
 		pid = fork();
 		if (pid < 0)
@@ -77,70 +52,131 @@ int main(int argc, char *argv[])
 		if (pid == 0) 
 		{
 			// Proceso hijo, esto se encarga del socket cliente!
-
-			close(sockfd);	//no se porque el close()
+			close(des_servidor);
+			close(pipe_envio[0]);
 
 			memset(buffer, 0, TAM);
-			if (read(newsockfd, buffer, TAM-1) < 0) 
+			if (read(des_cliente, buffer, TAM-1) < 0) 
 			{
 				perror("read");
 				exit(EXIT_FAILURE);
 			}
 
+			s = (struct sockaddr_in *) &cli_addr;
+			getpeername(des_cliente, (struct sockaddr*) &cli_addr, &clilen);
 
-			getpeername(newsockfd, (struct sockaddr*) &cli_addr, &clilen);
+			strcat(buffer,inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr));
+			write(pipe_envio[1], buffer, strlen(buffer)+1);
 
-			struct sockaddr_in *s = (struct sockaddr_in *) &cli_addr;
-
-			while (strcmp(buffer,"CTRL exit\n") != 0)
+/*			while (strcmp(buffer,"CTRL exit\n") != 0)
 			{
 				printf("%s:%d say:%s", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
 				switch (verificar_msj(buffer))
 				{
 					case EX_REGCLI:
-						write (newsockfd, "QUETAL", 18);
+						write (des_cliente, "QUETAL", 6);
 						memset(buffer_compartido, 0, TAM);
 						time(&rawtime);
 						fechahora=localtime(&rawtime);
-						strcat(strcat(strcat(buffer_compartido,"CLIREG|"),ipstr),asctime(fechahora));
+						strcat(buffer_compartido,strcat(strcat("CLIREG|",ipstr),asctime(fechahora)));
+
+						write(pipe_envio[1], buffer_compartido, TAM);
+
 						break;
 					case LISTAR_CLI:
-						write(newsockfd, archivo_listar("clientes"), TAM);
+						write(des_cliente, archivo_listar("clientes"), TAM);
 						break;
 					case ERR_REGCLI:
-						write (newsockfd, "ERROR", 18);
+						write (des_cliente, "ERROR", 18);
 						break;
 					case ERR_COM:
-						write (newsockfd, "ERROR COMANDO", 18);
+						write (des_cliente, "ERROR COMANDO", 18);
 						break;
 				}
 
 				memset(buffer, 0, TAM);
-				if (read(newsockfd, buffer, TAM-1) < 0) 
+				if (read(des_cliente, buffer, TAM-1) < 0) 
 				{
 					perror("read");
 					exit(EXIT_FAILURE);
 				}
 			}
+*/
+			
 			// Finalizo la ejecucion del cliente..
-			printf("El cliente ha dejado la conexion\n");
-			exit(EXIT_SUCCESS);
+			printf(" hijo: ya te envie los datos del cliente\n");
+//			exit(EXIT_SUCCESS);
 		}
 		else
 		{
 			//Proceso servidor, compartir recursos..
-			close(newsockfd);
+			close(des_cliente);
+			close(pipe_envio[1]);
 
-			memset(buffer_compartido, 0, TAM);
-			if (read(newsockfd, buffer_compartido, TAM-1) < 0) 
+			read(pipe_envio[0], buffer, TAM);
+			printf("en el padre recibo: %s\n",buffer);
+
+			//memset(buffer_compartido, 0, TAM);
+/*			if (read(newsockfd, buffer_compartido, TAM-1) < 0) 
 			{
 				perror("read");
 				exit(EXIT_FAILURE);
 			}
+*/
+
 		}
 	}
 	exit(EXIT_SUCCESS); 
 }
+
+int iniciar_servidor (int puerto)
+{
+	int sockfd;
+	struct sockaddr_in serv_addr;
+
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+
+	if (sockfd < 0)
+	{ 
+		perror("socket");
+		return -1;
+	}
+
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_addr.s_addr = INADDR_ANY;
+	serv_addr.sin_port = htons (puerto);
+
+	if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+	{
+		perror("bind");
+		return -1;
+	}
+
+	if(listen (sockfd, MAX_QUE) < 0)
+	{
+		perror("listen");
+		return -1;
+	}
+
+	printf ("## srv disponible, puerto %d\n", ntohs(serv_addr.sin_port));
+	return sockfd;
+}
+
+int aceptar_conexion(int socket)
+{
+	int newsockfd;
+	size_t clilen;
+	struct sockaddr_in cli_addr;
+	
+	newsockfd = accept(socket, (struct sockaddr *) &cli_addr, &clilen);
+	if (newsockfd < 0) 
+	{
+		perror("accept");
+		return -1;
+	}
+	return newsockfd;
+}
+
 
 int verificar_msj(char* entrada)
 {
