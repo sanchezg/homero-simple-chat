@@ -7,54 +7,27 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-
-#define MAX_QUE 5
-#define TAM 256
-
-typedef struct ptr 
-{
-	pthread_t data1;
-	int data2;
-	struct ptr *next;
-} lista_pt;
-
-void list_print(lista_pt *); 
-lista_pt **list_search_d2(lista_pt **, int);
-lista_pt **list_search_d1(lista_pt **, pthread_t);
-void list_remove(lista_pt **);
-lista_pt *list_add(lista_pt **, pthread_t, int);
-void *ejec_cliente(void *);
-int nuevo_cliente(lista_pt **, int);
-int aceptar_conexion(int);
-int iniciar_servidor (int);
-int list_len(lista_pt *);
+#include "serv_hilos.h"
 
 int SERVER_ACTIVO;
 
 int main(int argc, char *argv[]) 
 {
-	int des_servidor, des_cliente, clilen;
+	int des_servidor;
 	
-	struct sockaddr_in cli_addr;
-	lista_pt *thread = NULL;
+	pthread_t th_conex;
+//	lista_pt *thread = NULL;
 
-	des_servidor = iniciar_servidor(atoi(argv[1]));
+	des_servidor = iniciar_servidor(PUERTO);
 
-	//clilen = sizeof(cli_addr);
-
-	//supuestamente si no hay clientes en la cola, se queda esperando...
-	while(SERVER_ACTIVO)
+	if (pthread_create(&th_conex, NULL, ejec_servidor, (void*) &des_servidor) != 0)
 	{
-		des_cliente=aceptar_conexion(des_servidor);
-		if (nuevo_cliente(&thread, des_cliente) < 0)
-			exit(EXIT_FAILURE);
-
-		
-		//Si no hay mas conexiones o el adm cerro el server,
-		//SERVER_ACTIVO == 0;
-
-	//No hace falta hacer join, porque los threads de seguro terminan antes que el server...
+		printf ("ERROR PTHREAD SERVIDOR\n");
+		return -1;
 	}
+
+	/* Esperar a que termine el thread de ejecución. */
+	pthread_join(th_conex, NULL);	
 
 	exit(EXIT_SUCCESS);
 }
@@ -94,6 +67,30 @@ int iniciar_servidor (int puerto)
 	return sockfd;
 }
 
+/*
+	ejec_servidor se queda a la espera de conexiones
+	mientras el server esté activo. Por cada conexión
+	recibida, lanza un hilo que se encarga de ejecutar
+	la rutina común al cliente.
+*/
+
+void* ejec_servidor(void *ptr)
+{
+	int *iptr, des_servidor, des_cliente;
+	lista_pt *thread = NULL;
+
+	iptr = (int *) ptr;
+	des_servidor = *iptr;
+
+	while(SERVER_ACTIVO)
+	{
+		des_cliente=aceptar_conexion(des_servidor);
+		if (nuevo_cliente(&thread, des_cliente) < 0)
+			exit(EXIT_FAILURE);
+	}
+	return NULL;
+}
+
 int aceptar_conexion(int socket)
 {
 	int newsockfd;
@@ -116,12 +113,19 @@ int nuevo_cliente(lista_pt **n, int dsc)
 
 	if (pthread_create(&new, NULL, ejec_cliente, (void *) &dsc) != 0)
 	{
-		printf ("ERROR PTHREAD\n");
+		printf ("ERROR PTHREAD CLIENTE\n");
 		return -1;
 	}
 	list_add(n, new, dsc);
 	return 0;
 }
+
+/*
+	ejec_cliente es la rutina que realiza el hilo
+	que se encarga de cada cliente. Tiene que revisar
+	continuamente los msj que envía el cliente, y
+	mandarlos al hilo del servidor.
+*/
 
 void *ejec_cliente(void *ptr)
 {
@@ -141,15 +145,32 @@ void *ejec_cliente(void *ptr)
 	printf("hilo %lu del cliente %s\n", pthread_self(), inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr));
 
 	memset(buffer, 0, TAM);
-	if (read(des_cliente, buffer, TAM-1) < 0) 
+	if (read(isc, buffer, TAM-1) < 0) 
 	{
 		perror("read");
 		exit(EXIT_FAILURE);
 	}
 
+	while ((strstr(buffer,"CTRL exit\n") == NULL) && (getpeername(isc, (struct sockaddr*) &cli_addr, &clilen) == 0))
+	{
+		printf("%s:%d say:%s \n", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
+		write(isc, "QUETAL", 6);
+		memset(buffer, 0, TAM);
+		if (read(isc, buffer, TAM-1) < 0) 
+		{
+			perror("read");
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	printf("hilo %lu finalizado\n", pthread_self());
 	return NULL;
 }
 
+
+/*
+	Funciones de control de la lista de clientes.
+*/
 
 lista_pt *list_add(lista_pt **p, pthread_t i, int d) 
 {
@@ -163,7 +184,6 @@ lista_pt *list_add(lista_pt **p, pthread_t i, int d)
     return n;
 }
 
-/* borrar cabeza*/ 
 void list_remove(lista_pt **p) 
 { 
     if (*p != NULL) 
