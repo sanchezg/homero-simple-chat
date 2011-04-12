@@ -5,6 +5,13 @@
 #define TAM 256
 #define PUERTO 6666
 
+#define EXITO 0
+#define ERROR 1
+
+#define EXITO_REG_CLIENTE 10
+#define ERROR_REG_CLIENTE 11
+
+
 typedef struct ptr 
 {
 	pthread_t data1;
@@ -23,5 +30,13 @@ int aceptar_conexion(int);
 int iniciar_servidor (int);
 int list_len(lista_pt *);
 void* ejec_servidor(void *);
+int verificar_msj(char *);
+
+int archivo_agregar(char*, char*);
+char* archivo_listar(char*);
+int archivo_buscar(char *, char *);
+int registrar_usuario(char *);
+
+void broadcast_clientes(char *);
 
 #endif /* __SERV_HILOS__ */

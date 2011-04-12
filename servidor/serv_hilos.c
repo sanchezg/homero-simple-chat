@@ -10,6 +10,10 @@
 #include "serv_hilos.h"
 
 int SERVER_ACTIVO;
+char * ERROR_MSJ;
+pthread_mutex_t mutex_archivo_clientes = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_write_buffer = PTHREAD_MUTEX_INITIALIZER;
+lista_pt *thread = NULL;
 
 int main(int argc, char *argv[]) 
 {
@@ -28,7 +32,10 @@ int main(int argc, char *argv[])
 
 	/* Esperar a que termine el thread de ejecución. */
 	pthread_join(th_conex, NULL);	
-
+/*
+	archivo_borrar("clientes");
+	archivo_borrar("serv.log");
+*/
 	exit(EXIT_SUCCESS);
 }
 
@@ -62,6 +69,13 @@ int iniciar_servidor (int puerto)
 		return -1;
 	}
 
+	/*printf ("## creando logs...\n");
+	if ((archivo_crear("clientes") != EXITO) || (archivo_crear("serv.log") != EXITO))
+	{
+		printf("ERROR creando logs!!!\n");
+		return -1;
+	}*/
+
 	SERVER_ACTIVO = 1;
 	printf ("## srv disponible, puerto %d\n", ntohs(serv_addr.sin_port));
 	return sockfd;
@@ -77,7 +91,7 @@ int iniciar_servidor (int puerto)
 void* ejec_servidor(void *ptr)
 {
 	int *iptr, des_servidor, des_cliente;
-	lista_pt *thread = NULL;
+//	lista_pt *thread = NULL;
 
 	iptr = (int *) ptr;
 	des_servidor = *iptr;
@@ -133,7 +147,8 @@ void *ejec_cliente(void *ptr)
 	size_t clilen;
 	struct sockaddr_in cli_addr;
 	struct sockaddr_in* s;
-	char ipstr[INET_ADDRSTRLEN], buffer[TAM];
+	char ipstr[INET_ADDRSTRLEN], buffer[TAM], resp_servidor[TAM];
+	//char *buffer_salida;
 
 	iptr = (int *) ptr;
 	isc = *iptr;
@@ -145,28 +160,158 @@ void *ejec_cliente(void *ptr)
 	printf("hilo %lu del cliente %s\n", pthread_self(), inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr));
 
 	memset(buffer, 0, TAM);
+//	pthread_mutex_lock(&mutex_write_buffer);
 	if (read(isc, buffer, TAM-1) < 0) 
 	{
 		perror("read");
 		exit(EXIT_FAILURE);
 	}
+//	pthread_mutex_unlock(&mutex_write_buffer);
 
-	while ((strstr(buffer,"CTRL exit\n") == NULL) && (getpeername(isc, (struct sockaddr*) &cli_addr, &clilen) == 0))
+	while ((strcmp(buffer,"CTRL exit\n") != 0) && (getpeername(isc, (struct sockaddr*) &cli_addr, &clilen) == 0))
 	{
-		printf("%s:%d say:%s \n", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
-		write(isc, "QUETAL", 6);
+		printf("%s:%d say:%s", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
+
+		memset(resp_servidor, 0, TAM);
+		switch (verificar_msj(buffer))
+		{
+			case EXITO_REG_CLIENTE:
+				strcat(resp_servidor, "CTRL QUETAL");
+				//broadcast_clientes("CTRL ENTRO\n");
+				break;
+			case ERROR_REG_CLIENTE:
+				strcat(resp_servidor, "CTRL FUERA ");
+				strcat(resp_servidor, ERROR_MSJ);
+				break;
+			default:
+				strcat(resp_servidor, "ERROR desconocido");
+				break;
+		}
+
+		ERROR_MSJ = "";
+		strcat(resp_servidor, "\r\n");
+//		pthread_mutex_lock(&mutex_write_buffer);
+		write(isc, resp_servidor, TAM);
+//		pthread_mutex_unlock(&mutex_write_buffer);
+
+//		pthread_mutex_lock(&mutex_write_buffer);
 		memset(buffer, 0, TAM);
 		if (read(isc, buffer, TAM-1) < 0) 
 		{
 			perror("read");
 			exit(EXIT_FAILURE);
 		}
+//		pthread_mutex_unlock(&mutex_write_buffer);
 	}
 
 	printf("hilo %lu finalizado\n", pthread_self());
 	return NULL;
 }
 
+int verificar_msj(char * buffer_entrada)
+{
+	if (strstr(buffer_entrada,"CTRL HOLA") != NULL)
+	{
+		if (registrar_usuario(strtok(buffer_entrada," ")) == EXITO)
+			return EXITO_REG_CLIENTE;
+		else
+			return ERROR_REG_CLIENTE;
+	}
+	return 0;
+}
+
+int registrar_usuario(char *nombre)
+{
+	pthread_mutex_lock(&mutex_archivo_clientes);
+	if (archivo_buscar("clientes",nombre) == ERROR) //pregunto por error porque no quiero que este en el archivo...
+	{
+		if(archivo_agregar("clientes", nombre) == EXITO)
+			return EXITO;
+		else
+		{
+			ERROR_MSJ = "archivo_agregar()";
+			return ERROR;
+		}
+	}
+	pthread_mutex_unlock(&mutex_archivo_clientes);
+	ERROR_MSJ = "\"Error registrando usuario, el nombre ya está siendo usado\"";
+	return ERROR;
+}
+
+/* Funciones que tratan con archivos explícitamente */
+
+int archivo_buscar(char *nombre, char *cadena)
+{
+	char * buffer;
+
+	buffer = archivo_listar(nombre);
+
+	if (strstr(buffer,cadena) != NULL)
+		return EXITO;
+	else
+		return ERROR;
+}
+
+char* archivo_listar(char* nombre)
+{
+	FILE *pf;
+	char * buffer;
+	long lsize;
+	size_t result;
+
+	pf = fopen(nombre, "r");
+	if (pf==NULL) 
+	{
+		fclose(pf);
+		return NULL;		
+	}
+
+	fseek (pf, 0, SEEK_END);
+  	lsize = ftell (pf);
+	rewind (pf);
+
+	buffer = (char*) malloc (sizeof(char)*lsize);
+	if (buffer == NULL)
+	{
+		fclose(pf);
+		return NULL;
+	}
+
+	result = fread (buffer,1,lsize,pf);
+	if (result != lsize)
+	{
+		fclose(pf);
+		return NULL;
+	}
+	
+	return buffer;
+}
+
+int archivo_agregar(char* nombre_archivo, char* texto)
+{
+	FILE *pf;
+
+	if ((pf=fopen(nombre_archivo, "a")) == NULL) 
+	{
+		fclose(pf);
+		return ERROR;		
+	}
+
+	fputs(strcat(texto,"\n"),pf);
+	fclose(pf);
+	return EXITO;
+}
+
+void broadcast_clientes(char *msj)
+{	
+	lista_pt *n = (lista_pt *) malloc(sizeof(lista_pt));
+	n = thread;
+	while (n != NULL)
+	{
+		write(n->data2, msj, TAM);
+		n = n->next;
+	}
+}
 
 /*
 	Funciones de control de la lista de clientes.
@@ -177,7 +322,7 @@ lista_pt *list_add(lista_pt **p, pthread_t i, int d)
     lista_pt *n = (lista_pt *)malloc(sizeof(lista_pt));
     if (n == NULL)
         return NULL;
-    n->next = *p;                                                                            
+    n->next = *p;
     *p = n;
     n->data1 = i;
 	n->data2 = d;
