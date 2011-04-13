@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <regex.h>
 #include "serv_hilos.h"
 
 int SERVER_ACTIVO;
@@ -231,6 +232,32 @@ int verificar_msj(char * buffer_entrada)
 
 int registrar_usuario(char *nombre)
 {
+	regex_t regex;
+    int reti;
+	char msgbuf[100];
+
+	reti = regcomp(&regex, "[[:alnum:]]", 0);
+    if (reti)
+	{
+		ERROR_MSJ = "\"Error desconocido\"";
+		return ERROR;
+	}
+	reti = regexec(&regex, nombre, 0, NULL, 0);
+	if(reti == REG_NOMATCH)
+	{
+		ERROR_MSJ = "\"Error, sólo se aceptan caracteres alfanuméricos.\"";
+		return ERROR;
+	}
+	else 
+	{
+		regerror(reti, &regex, msgbuf, sizeof(msgbuf));
+		fprintf(stderr, "Regex match failed: %s\n", msgbuf);
+		return ERROR;
+	}
+	regfree(&regex);
+
+	//Si llego hasta acá es porque el nombre está bien...
+	//Hay que bloquear el archivo para saber que no lo va a usar otro thread...
 	pthread_mutex_lock(&mutex_archivo_clientes);
 	if (archivo_buscar("clientes",nombre) == ERROR) //pregunto por error porque no quiero que este en el archivo...
 	{
