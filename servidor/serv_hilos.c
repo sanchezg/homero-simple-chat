@@ -11,8 +11,11 @@
 
 int SERVER_ACTIVO;
 char * ERROR_MSJ;
+
 pthread_mutex_t mutex_archivo_clientes = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_write_buffer = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_listapt = PTHREAD_MUTEX_INITIALIZER;
+
 lista_pt *thread = NULL;
 
 int main(int argc, char *argv[]) 
@@ -130,7 +133,9 @@ int nuevo_cliente(lista_pt **n, int dsc)
 		printf ("ERROR PTHREAD CLIENTE\n");
 		return -1;
 	}
+	pthread_mutex_lock(&mutex_listapt);
 	list_add(n, new, dsc);
+	pthread_mutex_unlock(&mutex_listapt);
 	return 0;
 }
 
@@ -173,6 +178,7 @@ void *ejec_cliente(void *ptr)
 		printf("%s:%d say:%s", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
 
 		memset(resp_servidor, 0, TAM);
+		//pthread_mutex_lock(&mutex_write_buffer);
 		switch (verificar_msj(buffer))
 		{
 			case EXITO_REG_CLIENTE:
@@ -187,11 +193,14 @@ void *ejec_cliente(void *ptr)
 				strcat(resp_servidor, "ERROR desconocido");
 				break;
 		}
+		//pthread_mutex_unlock(&mutex_write_buffer);
 
 		ERROR_MSJ = "";
 		strcat(resp_servidor, "\r\n");
 //		pthread_mutex_lock(&mutex_write_buffer);
+		printf ("Se esta por mandar msj al cliente\n");
 		write(isc, resp_servidor, TAM);
+
 //		pthread_mutex_unlock(&mutex_write_buffer);
 
 //		pthread_mutex_lock(&mutex_write_buffer);
@@ -226,10 +235,14 @@ int registrar_usuario(char *nombre)
 	if (archivo_buscar("clientes",nombre) == ERROR) //pregunto por error porque no quiero que este en el archivo...
 	{
 		if(archivo_agregar("clientes", nombre) == EXITO)
+		{
+			pthread_mutex_unlock(&mutex_archivo_clientes);
 			return EXITO;
+		}
 		else
 		{
 			ERROR_MSJ = "archivo_agregar()";
+			pthread_mutex_unlock(&mutex_archivo_clientes);
 			return ERROR;
 		}
 	}
