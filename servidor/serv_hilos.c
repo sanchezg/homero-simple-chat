@@ -190,6 +190,11 @@ void *ejec_cliente(void *ptr)
 				strcat(resp_servidor, "CTRL FUERA ");
 				strcat(resp_servidor, ERROR_MSJ);
 				break;
+			case EXITO_CL_CHARL:
+				iniciar_conversacion(isc, cliente_destino);
+				break;
+			case ERROR_CL_CHARL:
+				break;
 			default:
 				strcat(resp_servidor, "ERROR desconocido");
 				break;
@@ -220,6 +225,7 @@ void *ejec_cliente(void *ptr)
 
 int verificar_msj(char * buffer_entrada)
 {
+	char* temp;
 	if (strstr(buffer_entrada,"CTRL HOLA") != NULL)
 	{
 		if (registrar_usuario(strtok(buffer_entrada," ")) == EXITO)
@@ -227,6 +233,33 @@ int verificar_msj(char * buffer_entrada)
 		else
 			return ERROR_REG_CLIENTE;
 	}
+	if (strstr(buffer_entrada,"CTRL CHARLEMOS") != NULL)
+	{
+		temp=strtok(buffer_entrada,"\"")
+		while(temp != NULL)
+		{
+			temp=(NULL,"\"");
+		}
+		pthread_mutex_lock(&mutex_archivo_clientes);
+		if (archivo_buscar("clientes", temp) == EXITO)
+		{
+			pthread_mutex_unlock(&mutex_archivo_clientes);
+			if(cliente_charlemos(temp) == EXITO)
+				return EXITO_CL_CHARL;
+			else
+			{
+				ERROR_MSJ = "El cliente rechazó la conexión\n";
+				return ERROR_CL_CHARL;
+			}
+		}
+		else
+		{
+			pthread_mutex_unlock(&mutex_archivo_clientes);
+			ERROR_MSJ = "No se encuentra el cliente\n";
+			return ERROR_CLIENTE_INC;
+		}
+		
+
 	return 0;
 }
 

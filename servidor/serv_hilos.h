@@ -10,6 +10,8 @@
 
 #define EXITO_REG_CLIENTE 10
 #define ERROR_REG_CLIENTE 11
+#define EXITO_CL_CHARL	20
+#define ERROR_CL_CHARL	21
 
 
 typedef struct ptr 
@@ -38,5 +40,7 @@ int archivo_buscar(char *, char *);
 int registrar_usuario(char *);
 
 void broadcast_clientes(char *);
+int cliente_charlemos(char *);
+void iniciar_conversacion(cliente_origen, cliente_destino);
 
 #endif /* __SERV_HILOS__ */
