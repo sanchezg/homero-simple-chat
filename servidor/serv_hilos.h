@@ -26,13 +26,14 @@ lista_pt **list_search_d2(lista_pt **, int);
 lista_pt **list_search_d1(lista_pt **, pthread_t);
 void list_remove(lista_pt **);
 lista_pt *list_add(lista_pt **, pthread_t, int);
+
 void *ejec_cliente(void *);
 int nuevo_cliente(lista_pt **, int);
 int aceptar_conexion(int);
 int iniciar_servidor (int);
 int list_len(lista_pt *);
 void* ejec_servidor(void *);
-int verificar_msj(char *);
+int verificar_msj(char *, int);
 
 int archivo_agregar(char*, char*);
 char* archivo_listar(char*);
@@ -42,5 +43,7 @@ int registrar_usuario(char *);
 void broadcast_clientes(char *);
 int cliente_charlemos(char *);
 void iniciar_conversacion(cliente_origen, cliente_destino);
+
+int log_evento(char *, char *);
 
 #endif /* __SERV_HILOS__ */

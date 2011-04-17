@@ -16,6 +16,7 @@ char * ERROR_MSJ;
 pthread_mutex_t mutex_archivo_clientes = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_write_buffer = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_listapt = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_archivo_log = PTHREAD_MUTEX_INITIALIZER;
 
 lista_pt *thread = NULL;
 
@@ -153,8 +154,7 @@ void *ejec_cliente(void *ptr)
 	size_t clilen;
 	struct sockaddr_in cli_addr;
 	struct sockaddr_in* s;
-	char ipstr[INET_ADDRSTRLEN], buffer[TAM], resp_servidor[TAM];
-	//char *buffer_salida;
+	char ipstr[INET_ADDRSTRLEN], buffer[TAM], resp_servidor[TAM], buffer_envio[TAM];
 
 	iptr = (int *) ptr;
 	isc = *iptr;
@@ -166,21 +166,19 @@ void *ejec_cliente(void *ptr)
 	printf("hilo %lu del cliente %s\n", pthread_self(), inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr));
 
 	memset(buffer, 0, TAM);
-//	pthread_mutex_lock(&mutex_write_buffer);
 	if (read(isc, buffer, TAM-1) < 0) 
 	{
 		perror("read");
 		exit(EXIT_FAILURE);
 	}
-//	pthread_mutex_unlock(&mutex_write_buffer);
 
 	while ((strcmp(buffer,"CTRL exit\n") != 0) && (getpeername(isc, (struct sockaddr*) &cli_addr, &clilen) == 0))
 	{
 		printf("%s:%d say:%s", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
 
 		memset(resp_servidor, 0, TAM);
-		//pthread_mutex_lock(&mutex_write_buffer);
-		switch (verificar_msj(buffer))
+
+		switch (verificar_msj(buffer, isc))
 		{
 			case EXITO_REG_CLIENTE:
 				strcat(resp_servidor, "CTRL QUETAL");
@@ -190,42 +188,61 @@ void *ejec_cliente(void *ptr)
 				strcat(resp_servidor, "CTRL FUERA ");
 				strcat(resp_servidor, ERROR_MSJ);
 				break;
+
 			case EXITO_CL_CHARL:
+				cliente_destino = strtok(buffer_entrada,"\"")
+				while(cliente_destino != NULL)
+				{
+					cliente_destino = strtok(NULL,"\"");
+				}
 				iniciar_conversacion(isc, cliente_destino);
+				resp_servidor = "CONTROL DALE";
 				break;
 			case ERROR_CL_CHARL:
+				// ************************ HACER ALGO!!!!!!!!!!!!!!!!!
 				break;
+
+			case EXITO_VER_CONV:
+				buffer_envio = strtok(buffer_entrada,"\"")
+				while(buffer_envio != NULL)
+				{
+					buffer_envio = strtok(NULL,"\"");
+				}
+				if(mandar_msj(isc, cliente_destino, buffer_envio) == EXITO)
+					resp_servidor = "MSG_OK";
+				else
+					resp_servidor = "Error al enviar msg. Intente nuevamente."
+			case ERROR_VER_CONV:
+				strcat(resp_servidor, ERROR_MSG);
+
 			default:
 				strcat(resp_servidor, "ERROR desconocido");
 				break;
 		}
-		//pthread_mutex_unlock(&mutex_write_buffer);
 
 		ERROR_MSJ = "";
 		strcat(resp_servidor, "\r\n");
-//		pthread_mutex_lock(&mutex_write_buffer);
-		printf ("Se esta por mandar msj al cliente\n");
 		write(isc, resp_servidor, TAM);
 
-//		pthread_mutex_unlock(&mutex_write_buffer);
-
-//		pthread_mutex_lock(&mutex_write_buffer);
 		memset(buffer, 0, TAM);
 		if (read(isc, buffer, TAM-1) < 0) 
 		{
 			perror("read");
 			exit(EXIT_FAILURE);
 		}
-//		pthread_mutex_unlock(&mutex_write_buffer);
 	}
 
 	printf("hilo %lu finalizado\n", pthread_self());
 	return NULL;
 }
 
-int verificar_msj(char * buffer_entrada)
+/* Aca se utiliza source sock fd para cuestiones que relacionan dos clientes (conversación) */
+int verificar_msj(char * buffer_entrada, int ssock)
 {
 	char* temp;
+	int i;
+
+	/* Primero verificar por registro */
 	if (strstr(buffer_entrada,"CTRL HOLA") != NULL)
 	{
 		if (registrar_usuario(strtok(buffer_entrada," ")) == EXITO)
@@ -233,18 +250,20 @@ int verificar_msj(char * buffer_entrada)
 		else
 			return ERROR_REG_CLIENTE;
 	}
+
+	/* Verificar por inicio chat */
 	if (strstr(buffer_entrada,"CTRL CHARLEMOS") != NULL)
 	{
-		temp=strtok(buffer_entrada,"\"")
+		temp = strtok(buffer_entrada,"\"")
 		while(temp != NULL)
 		{
-			temp=(NULL,"\"");
+			temp = strtok(NULL,"\"");
 		}
 		pthread_mutex_lock(&mutex_archivo_clientes);
 		if (archivo_buscar("clientes", temp) == EXITO)
 		{
 			pthread_mutex_unlock(&mutex_archivo_clientes);
-			if(cliente_charlemos(temp) == EXITO)
+			if(cliente_charlemos(ssock, temp) == EXITO)
 				return EXITO_CL_CHARL;
 			else
 			{
@@ -258,8 +277,26 @@ int verificar_msj(char * buffer_entrada)
 			ERROR_MSJ = "No se encuentra el cliente\n";
 			return ERROR_CLIENTE_INC;
 		}
-		
+	}
 
+	/* Verificar por envío de msg */
+	if (strstr(buffer_entrada, "MSG") != NULL)
+	{
+		i = 0;
+		temp = strtok(buffer_entrada," ")
+		while(temp != NULL && i<2)
+		{
+			temp = strtok(NULL," ");
+			i++;
+		}
+		if (verificar_conversacion(ssock, temp) == EXITO)
+			return EXITO_VER_CONV;
+		else
+		{
+			ERROR_MSJ = "Error al tratar de conversar";
+			return ERROR_VER_CONV;
+		}
+	}
 	return 0;
 }
 
@@ -458,3 +495,32 @@ int list_len(lista_pt *s)
 	return cont;
 }
 
+int log_evento(char *ev, char *msj)
+{
+	time_t rawtime;
+	struct tm * timeinfo;
+	char log_msj[256];
+	FILE *pf;
+
+	time(&rawtime);
+	timeinfo = localtime (&rawtime);
+
+	strcat(log_msj, asctime(timeinfo));
+	strcat(log_msj, "\t");
+	strcat(log_msj, ev);
+	strcat(log_msj, "\t");
+	strcat(log_msj, msj);
+
+	pthread_mutex_lock(&mutex_archivo_log);
+	if ((pf=fopen("serv.log", "a")) == NULL) 
+	{
+		fclose(pf);
+		pthread_mutex_unlock(&mutex_archivo_log);
+		return ERROR;		
+	}
+
+	fputs(log_msj, pf);
+	fclose(pf);
+	pthread_mutex_unlock(&mutex_archivo_log);
+	return EXITO;
+}
