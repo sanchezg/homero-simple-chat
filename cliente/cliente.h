@@ -8,6 +8,8 @@
 #define ERROR_REG 11
 #define ENTRO_ALGUIEN 20
 
+#define ERROR_MSJ -1
+
 int abrir_conexion();
 int conectar_servidor(int, char*);
 int verificar_msj(char *);

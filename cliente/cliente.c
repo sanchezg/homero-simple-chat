@@ -14,7 +14,7 @@ char* MSJ_SALIDA;
 
 int main( int argc, char *argv[] ) 
 {
-	int mi_socket;
+	int mi_socket, flag_msj_serv = 0;
 	char buffer[TAM];
 
 	if (argc < 2) 
@@ -23,7 +23,7 @@ int main( int argc, char *argv[] )
 		exit(EXIT_FAILURE);
 	}
 
-	if (mi_socket = abrir_conexion()) < 0)
+	if ((mi_socket = abrir_conexion()) < 0)
 	{
 		printf("Error al abrir socket, intente nuevamente.\n");
 		exit(EXIT_FAILURE);
@@ -67,13 +67,15 @@ int main( int argc, char *argv[] )
 			}
 		}
 
-		switch (verificar_msj(buffer)):
+		switch (verificar_msj(buffer))
 		{
 			case EXITO_REG:
 				printf("Registro exitoso.\n");
+				memset(buffer, '0', TAM);
 				break;
 			case ERROR_REG:
 				printf("Registro rechazado. Msj servidor: %s\n", MSJ_SALIDA);
+				memset(buffer, '0', TAM);
 				break;
 			case ENTRO_ALGUIEN:
 				printf("## servidor: %s\n", buffer);
@@ -83,12 +85,12 @@ int main( int argc, char *argv[] )
 		}
 
 		//verificar si el servidor mandó algún msj...
-		memset(buffer, '0', TAM);
-		if (recv (mi_socket, buffer, TAM, O_NONBLOCK) != -1)
+/*		memset(buffer, '0', TAM);
+		if (recv (mi_socket, buffer, TAM, 0) != -1)
 		{
 			flag_msj_serv = 1;
 			continue;
-		}
+		}*/
 
 //		printf("srv: %s\n", buffer);
 //		printf("usr: ");
@@ -97,7 +99,7 @@ int main( int argc, char *argv[] )
 		fgets(buffer, TAM-1, stdin);
 	}
 	puts("Hasta la proxima, baby..");
-	if (write(sockfd, buffer, strlen(buffer)) < 0) 
+	if (write(mi_socket, buffer, strlen(buffer)) < 0) 
 	{
 		perror("write");
 		exit(EXIT_FAILURE);
@@ -114,7 +116,7 @@ int verificar_msj(char * buffer)
 		return EXITO_REG;
 	if (strstr(buffer, "CTRL FUERA"))
 	{
-		temp = strtok(buffer_entrada,"\"")
+		temp = strtok(buffer,"\"");
 		while(temp != NULL)
 			temp = strtok(NULL,"\"");
 		MSJ_SALIDA = temp;
@@ -122,6 +124,7 @@ int verificar_msj(char * buffer)
 	}
 	if (strstr(buffer, "CTRL ENTRO"))
 		return ENTRO_ALGUIEN;
+	return ERROR_MSJ;
 }
 
 int abrir_conexion()
@@ -144,7 +147,7 @@ int conectar_servidor(int socket, char* hostname)
 	bcopy ((char *) server->h_addr, (char *) &serv_addr.sin_addr.s_addr, server->h_length);
 	serv_addr.sin_port = htons(PUERTO);
 
-	if (connect (sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
+	if (connect (socket, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
 		return -1;
 	return 0;
 }

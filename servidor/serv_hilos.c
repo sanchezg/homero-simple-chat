@@ -155,6 +155,7 @@ void *ejec_cliente(void *ptr)
 	struct sockaddr_in cli_addr;
 	struct sockaddr_in* s;
 	char ipstr[INET_ADDRSTRLEN], buffer[TAM], resp_servidor[TAM], buffer_envio[TAM];
+	char* tmp;
 
 	iptr = (int *) ptr;
 	isc = *iptr;
@@ -196,22 +197,25 @@ void *ejec_cliente(void *ptr)
 					cliente_destino = strtok(NULL,"\"");
 				}
 				iniciar_conversacion(isc, cliente_destino);*/
-				resp_servidor = "CONTROL DALE"; // Con el "dale" lo estoy habilitando a que utilice el MSG con el usuario
+				strcat(resp_servidor,"CONTROL DALE"); // Con el "dale" lo estoy habilitando a que utilice el MSG con el usuario
 				break;
 			case ERROR_CL_CHARL:
 				// ************************ HACER ALGO!!!!!!!!!!!!!!!!!
 				break;
 
 			case EXITO_VER_CONV:
-				buffer_envio = strtok(buffer_entrada,"\"")
-				while(buffer_envio != NULL)
+				tmp = strtok(buffer,"\"");
+				while(tmp != NULL)
 				{
-					buffer_envio = strtok(NULL,"\"");
+					tmp = strtok(NULL,"\"");
 				}
+				strcat(buffer_envio, tmp);
 				if(mandar_msj(isc, cliente_destino, buffer_envio) == EXITO)
-					resp_servidor = "MSG_OK";
+				{
+					strcat(resp_servidor,"MSG_OK");
+				}
 				else
-					resp_servidor = "Error al enviar msg. Intente nuevamente."
+					strcat(resp_servidor,"Error al enviar msg. Intente nuevamente.");
 			case ERROR_VER_CONV:
 				strcat(resp_servidor, ERROR_MSG);
 
@@ -240,7 +244,7 @@ void *ejec_cliente(void *ptr)
 int verificar_msj(char * buffer_entrada, int ssock)
 {
 	char* temp;
-	int i;
+	int i, dsock;
 
 	/* Primero verificar por registro */
 	if (strstr(buffer_entrada,"CTRL HOLA") != NULL)
@@ -254,7 +258,7 @@ int verificar_msj(char * buffer_entrada, int ssock)
 	/* Verificar por inicio chat */
 	if (strstr(buffer_entrada,"CTRL CHARLEMOS") != NULL)
 	{
-		temp = strtok(buffer_entrada,"\"")
+		temp = strtok(buffer_entrada,"\"");
 		while(temp != NULL)
 		{
 			temp = strtok(NULL,"\"");
@@ -263,7 +267,8 @@ int verificar_msj(char * buffer_entrada, int ssock)
 		if (archivo_buscar("clientes", temp) == EXITO)
 		{
 			pthread_mutex_unlock(&mutex_archivo_clientes);
-			if(cliente_charlemos(ssock, temp) == EXITO)
+			dsock = obtener_id_nombre(temp);
+			if(cliente_charlemos(ssock, dsock) == EXITO)
 				return EXITO_CL_CHARL;
 			else
 			{
@@ -283,7 +288,7 @@ int verificar_msj(char * buffer_entrada, int ssock)
 	if (strstr(buffer_entrada, "MSG") != NULL)
 	{
 		i = 0;
-		temp = strtok(buffer_entrada," ")
+		temp = strtok(buffer_entrada," ");
 		while(temp != NULL && i<2)
 		{
 			temp = strtok(NULL," ");
@@ -300,13 +305,35 @@ int verificar_msj(char * buffer_entrada, int ssock)
 	return 0;
 }
 
+int obtener_id_nombre(char* nombre)
+{
+	int id;
+	lista_pt *n = malloc(sizeof(lista_pt));
+
+	if ((n == list_search_d3(&thread, nombre)) == NULL)
+		return -1;
+	else
+		return n->_id_socket_;
+}
+
+char* obtener_nombre_id(int id)
+{
+	char* nombre;
+	lista_pt *n = malloc(sizeof(lista_pt));
+
+	if ((n == list_search_d2(&thread, id)) == NULL)
+		return NULL;
+	else
+		return n->_nombre_;
+}
+
 /*	Preguntar al cliente destino si quiere charlar. 
 	Envia un msj con send con la pregunta, y espera por la rpta. */
 int cliente_charlemos(int cl_orig, int cl_dest)
 {
 	char* buffer, nombre_origen;
 
-	nombre_origen = sd_de_nombre(cl_origen);
+	nombre_origen = obtener_nombre_id(cl_origen);
 	strcat(buffer, "CTRL CHAT: ");
 	strcat(buffer, nombre_origen);
 	strcat(buffer, "\n");
@@ -359,6 +386,9 @@ int registrar_usuario(char *nombre)
 		if(archivo_agregar("clientes", nombre) == EXITO)
 		{
 			pthread_mutex_unlock(&mutex_archivo_clientes);
+			pthread_mutex_lock(&mutex_listapt);
+			// inlcuir en la lista el nombre del cliente...
+			pthread_mutex_unlock(&mutex_listapt);
 			return EXITO;
 		}
 		else
@@ -443,8 +473,8 @@ void broadcast_clientes(char *msj)
 	n = thread;
 	while (n != NULL)
 	{
-		write(n->data2, msj, TAM);
-		n = n->next;
+		write(n->_id_socket_, msj, TAM);
+		n = n->_next_;
 	}
 }
 
@@ -457,10 +487,10 @@ lista_pt *list_add(lista_pt **p, pthread_t i, int d)
     lista_pt *n = (lista_pt *)malloc(sizeof(lista_pt));
     if (n == NULL)
         return NULL;
-    n->next = *p;
+    n->_next_ = *p;
     *p = n;
-    n->data1 = i;
-	n->data2 = d;
+    n->_id_thread_ = i;
+	n->_id_socket_ = d;
     return n;
 }
 
@@ -469,7 +499,7 @@ void list_remove(lista_pt **p)
     if (*p != NULL) 
 	{
         lista_pt *n = *p;
-        *p = (*p)->next;
+        *p = (*p)->_next_;
         free(n);
     }
 }
@@ -478,9 +508,9 @@ lista_pt **list_search_d1(lista_pt **n, pthread_t i)
 {
     while (*n != NULL) 
 	{
-        if ((*n)->data1 == i) 
+        if ((*n)->_id_thread_ == i) 
 			return n;
-        n = &(*n)->next;
+        n = &(*n)->_next_;
     }
     return NULL;
 }
@@ -489,9 +519,20 @@ lista_pt **list_search_d2(lista_pt **n, int i)
 {
     while (*n != NULL) 
 	{
-        if ((*n)->data2 == i) 
+        if ((*n)->_id_socket_ == i) 
 			return n;
-        n = &(*n)->next;
+        n = &(*n)->_next_;
+    }
+    return NULL;
+}
+
+lista_pt **list_search_d3(lista_pt **n, char* nom) 
+{
+    while (*n != NULL) 
+	{
+        if (strcmp((*n)->_nombre_, nom) == 0) 
+			return n;
+        n = &(*n)->_next_;
     }
     return NULL;
 }
@@ -502,8 +543,8 @@ void list_print(lista_pt *n)
         printf("lista esta vacía\n");
     }
     while (n != NULL) {
-        printf("print %p %p %lu\n", n, n->next, n->data1);
-        n = n->next;
+        printf("print %p %p %lu\n", n, n->_next_, n->_id_thread_);
+        n = n->_next_;
     }
 }
 
@@ -514,7 +555,7 @@ int list_len(lista_pt *s)
 	lista_pt *n = s;
 	while (s != NULL)
 	{
-		n = n->next;
+		n = n->_next_;
 		cont+=1;
 	}
 	return cont;

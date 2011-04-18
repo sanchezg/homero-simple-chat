@@ -12,18 +12,23 @@
 #define ERROR_REG_CLIENTE 11
 #define EXITO_CL_CHARL	20
 #define ERROR_CL_CHARL	21
+#define EXITO_VER_CONV	30
+#define ERROR_VER_CONV	31
+#define ERROR_CLIENTE_INC 41
 
 
 typedef struct ptr 
 {
-	pthread_t data1;
-	int data2;
-	struct ptr *next;
+	pthread_t _id_thread_;	// id_thread encargado de la conexion
+	int _id_socket_;			// id_socket
+	char* _nombre_;			// nombre del cliente (nickname)
+	struct ptr *_next_;
 } lista_pt;
 
 void list_print(lista_pt *); 
-lista_pt **list_search_d2(lista_pt **, int);
 lista_pt **list_search_d1(lista_pt **, pthread_t);
+lista_pt **list_search_d2(lista_pt **, int);
+lista_pt **list_search_d3(lista_pt **, char*);
 void list_remove(lista_pt **);
 lista_pt *list_add(lista_pt **, pthread_t, int);
 
@@ -41,8 +46,13 @@ int archivo_buscar(char *, char *);
 int registrar_usuario(char *);
 
 void broadcast_clientes(char *);
-int cliente_charlemos(char *);
-void iniciar_conversacion(cliente_origen, cliente_destino);
+int cliente_charlemos(int, int);
+int mandar_msj(int, int, char*)
+
+int obtener_id_nombre(char*);
+char* obtener_nombre_id(int);
+
+//void iniciar_conversacion(cliente_origen, cliente_destino);
 
 int log_evento(char *, char *);
 
