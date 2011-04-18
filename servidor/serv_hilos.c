@@ -190,13 +190,13 @@ void *ejec_cliente(void *ptr)
 				break;
 
 			case EXITO_CL_CHARL:
-				cliente_destino = strtok(buffer_entrada,"\"")
+				/*cliente_destino = strtok(buffer_entrada,"\"")
 				while(cliente_destino != NULL)
 				{
 					cliente_destino = strtok(NULL,"\"");
 				}
-				iniciar_conversacion(isc, cliente_destino);
-				resp_servidor = "CONTROL DALE";
+				iniciar_conversacion(isc, cliente_destino);*/
+				resp_servidor = "CONTROL DALE"; // Con el "dale" lo estoy habilitando a que utilice el MSG con el usuario
 				break;
 			case ERROR_CL_CHARL:
 				// ************************ HACER ALGO!!!!!!!!!!!!!!!!!
@@ -267,7 +267,7 @@ int verificar_msj(char * buffer_entrada, int ssock)
 				return EXITO_CL_CHARL;
 			else
 			{
-				ERROR_MSJ = "El cliente rechazó la conexión\n";
+				//ERROR_MSJ = "El cliente rechazó la conexión\n";
 				return ERROR_CL_CHARL;
 			}
 		}
@@ -298,6 +298,31 @@ int verificar_msj(char * buffer_entrada, int ssock)
 		}
 	}
 	return 0;
+}
+
+/*	Preguntar al cliente destino si quiere charlar. 
+	Envia un msj con send con la pregunta, y espera por la rpta. */
+int cliente_charlemos(int cl_orig, int cl_dest)
+{
+	char* buffer, nombre_origen;
+
+	nombre_origen = sd_de_nombre(cl_origen);
+	strcat(buffer, "CTRL CHAT: ");
+	strcat(buffer, nombre_origen);
+	strcat(buffer, "\n");
+
+	if (send(cl_dest, buffer, TAM, 0) < 0)
+	{
+		ERROR_MSJ = "Error al tratar de contactar, intente nuevamente\n";
+		return ERROR;
+	}
+
+	memset(buffer, 0, TAM);
+	recv(cl_dest, buffer, TAM, 0);
+	if (strcmp(buffer, "OK\n")
+		return EXITO;
+	ERROR_MSJ = "El cliente rechazó la conversación\n";
+	return ERROR;
 }
 
 int registrar_usuario(char *nombre)
@@ -510,6 +535,7 @@ int log_evento(char *ev, char *msj)
 	strcat(log_msj, ev);
 	strcat(log_msj, "\t");
 	strcat(log_msj, msj);
+	strcat(log_msj, "\n");
 
 	pthread_mutex_lock(&mutex_archivo_log);
 	if ((pf=fopen("serv.log", "a")) == NULL) 

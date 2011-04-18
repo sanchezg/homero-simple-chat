@@ -7,73 +7,92 @@
 #include <netdb.h> 
 #include <unistd.h>
 
-#define TAM 256
+#include "cliente.h"
+
+char* nombre;
+char* MSJ_SALIDA;
 
 int main( int argc, char *argv[] ) 
 {
-	int sockfd, puerto;
-	struct sockaddr_in serv_addr;
-	struct hostent *server;
+	int mi_socket;
+	char buffer[TAM];
 
-	char buffer[TAM];//, usuario[32];
-	if ( argc < 2 ) 
+	if (argc < 2) 
 	{
 		fprintf( stderr, "Uso %s <host>\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
 
-	puerto = 6666;
-	
-	/*if(strcpy(usuario,argv[2]) < 0)
+	if (mi_socket = abrir_conexion()) < 0)
 	{
-		perror("strcpy");
-		exit(EXIT_FAILURE);
-	}*/
- 
-	sockfd = socket( AF_INET, SOCK_STREAM, 0 );
-	if ( sockfd < 0 ) 
-	{
-		perror("socket");
+		printf("Error al abrir socket, intente nuevamente.\n");
 		exit(EXIT_FAILURE);
 	}
 
-	server = gethostbyname( argv[1] );
-	if (server == NULL) 
+	if (conectar_servidor(mi_socket, argv[1]) < 0)
 	{
-		fprintf( stderr,"Error, no existe el host\n" );
-		exit(EXIT_FAILURE);
-	}
-	memset( &serv_addr, '0', sizeof(serv_addr) );
-	serv_addr.sin_family = AF_INET;
-	bcopy( (char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length );
-	serv_addr.sin_port = htons(puerto);
-	if (connect( sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) 
-	{
-		perror("connect");
+		printf("Error al conectar a servidor, intente nuevamente.\n");
 		exit(EXIT_FAILURE);
 	}
 
-	printf("ingrese msj inicial: ");
+	printf("Ingrese MSG inicial: ");
+/*	printf("\t\tBienvenido a Homero-Simple-Chat.\n\tIngrese un comando:\
+			\n\t<nickname> CTRL HOLA: Se registra con el servidor.\
+			\n\tCTRL LISTAR: Muestra los usuarios conectados.\
+			\n\tCTRL CHARLEMOS \"destino\": Trata de iniciar una conversación con usuario \"destino\"\
+			\n\tMSG <destino> \"Mensaje\": Transmite \"Mensaje\" al usuario <destino>\
+			(Es necesario haber iniciado la conversación antes)."\
+			\n\tmenu: muestra este menú.\
+			\n\texit: sale del programa.");
+*/
 	memset(buffer, '0', TAM);
 	fgets(buffer, TAM-1, stdin);
 
-	while (strcmp(buffer,"CTRL exit\n") != 0)
+	while (strcmp(buffer,"exit\n") != 0)
 	{
-		if (write(sockfd, buffer, strlen(buffer)) < 0) 
+		if (flag_msj_serv == 0)
 		{
-			perror("write");
-			exit(EXIT_FAILURE);
+			if (write(mi_socket, buffer, strlen(buffer)) < 0) 
+			{
+				perror("write");
+				exit(EXIT_FAILURE);
+			}
+
+			memset (buffer, '\0', TAM );
+		
+			if (read(mi_socket, buffer, TAM) < 0)
+			{
+				perror("read");
+				exit(EXIT_FAILURE);
+			}
 		}
 
-		memset( buffer, '\0', TAM );
-		
-		if (read(sockfd, buffer, TAM) < 0)
+		switch (verificar_msj(buffer)):
 		{
-			perror("read");
-			exit(EXIT_FAILURE);
+			case EXITO_REG:
+				printf("Registro exitoso.\n");
+				break;
+			case ERROR_REG:
+				printf("Registro rechazado. Msj servidor: %s\n", MSJ_SALIDA);
+				break;
+			case ENTRO_ALGUIEN:
+				printf("## servidor: %s\n", buffer);
+				break;
+			default:
+				break;
 		}
-		printf("srv: %s\n", buffer);
-		printf("usr: ");
+
+		//verificar si el servidor mandó algún msj...
+		memset(buffer, '0', TAM);
+		if (recv (mi_socket, buffer, TAM, O_NONBLOCK) != -1)
+		{
+			flag_msj_serv = 1;
+			continue;
+		}
+
+//		printf("srv: %s\n", buffer);
+//		printf("usr: ");
+		//sino esperar por la entrada de teclado, y seguir...
 		memset(buffer, '0', TAM);
 		fgets(buffer, TAM-1, stdin);
 	}
@@ -85,4 +104,47 @@ int main( int argc, char *argv[] )
 	}
 
 	exit(EXIT_SUCCESS);
-} 
+}
+
+int verificar_msj(char * buffer)
+{
+	char *temp;
+
+	if (strstr(buffer, "CTRL QUETAL\n"))
+		return EXITO_REG;
+	if (strstr(buffer, "CTRL FUERA"))
+	{
+		temp = strtok(buffer_entrada,"\"")
+		while(temp != NULL)
+			temp = strtok(NULL,"\"");
+		MSJ_SALIDA = temp;
+		return ERROR_REG;
+	}
+	if (strstr(buffer, "CTRL ENTRO"))
+		return ENTRO_ALGUIEN;
+}
+
+int abrir_conexion()
+{
+	return socket (AF_INET, SOCK_STREAM, 0);
+}
+
+int conectar_servidor(int socket, char* hostname)
+{
+	struct hostent *server;
+	struct sockaddr_in serv_addr;
+
+	server = gethostbyname(hostname);
+
+	if (server == NULL) 
+		return -1;
+
+	memset (&serv_addr, '0', sizeof(serv_addr));
+	serv_addr.sin_family = AF_INET;
+	bcopy ((char *) server->h_addr, (char *) &serv_addr.sin_addr.s_addr, server->h_length);
+	serv_addr.sin_port = htons(PUERTO);
+
+	if (connect (sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
+		return -1;
+	return 0;
+}
