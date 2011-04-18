@@ -210,14 +210,14 @@ void *ejec_cliente(void *ptr)
 					tmp = strtok(NULL,"\"");
 				}
 				strcat(buffer_envio, tmp);
-				if(mandar_msj(isc, cliente_destino, buffer_envio) == EXITO)
+				if(mandar_msj(isc, obtener_id_nombre(tmp), buffer_envio) == EXITO)
 				{
 					strcat(resp_servidor,"MSG_OK");
 				}
 				else
 					strcat(resp_servidor,"Error al enviar msg. Intente nuevamente.");
 			case ERROR_VER_CONV:
-				strcat(resp_servidor, ERROR_MSG);
+				strcat(resp_servidor, ERROR_MSJ);
 
 			default:
 				strcat(resp_servidor, "ERROR desconocido");
@@ -294,7 +294,7 @@ int verificar_msj(char * buffer_entrada, int ssock)
 			temp = strtok(NULL," ");
 			i++;
 		}
-		if (verificar_conversacion(ssock, temp) == EXITO)
+		if (verificar_conversacion(ssock, obtener_id_nombre(temp)) == EXITO)
 			return EXITO_VER_CONV;
 		else
 		{
@@ -307,33 +307,31 @@ int verificar_msj(char * buffer_entrada, int ssock)
 
 int obtener_id_nombre(char* nombre)
 {
-	int id;
-	lista_pt *n = malloc(sizeof(lista_pt));
+	lista_pt **n = malloc(sizeof(lista_pt*));
 
 	if ((n == list_search_d3(&thread, nombre)) == NULL)
 		return -1;
 	else
-		return n->_id_socket_;
+		return ((int) &(*n)->_id_socket_);
 }
 
 char* obtener_nombre_id(int id)
 {
-	char* nombre;
-	lista_pt *n = malloc(sizeof(lista_pt));
+	lista_pt **n = malloc(sizeof(lista_pt));
 
 	if ((n == list_search_d2(&thread, id)) == NULL)
 		return NULL;
 	else
-		return n->_nombre_;
+		return ((char*) &(*n)->_nombre_);
 }
 
 /*	Preguntar al cliente destino si quiere charlar. 
 	Envia un msj con send con la pregunta, y espera por la rpta. */
 int cliente_charlemos(int cl_orig, int cl_dest)
 {
-	char* buffer, nombre_origen;
+	char* buffer, *nombre_origen;
 
-	nombre_origen = obtener_nombre_id(cl_origen);
+	nombre_origen = obtener_nombre_id(cl_orig);
 	strcat(buffer, "CTRL CHAT: ");
 	strcat(buffer, nombre_origen);
 	strcat(buffer, "\n");
@@ -346,7 +344,7 @@ int cliente_charlemos(int cl_orig, int cl_dest)
 
 	memset(buffer, 0, TAM);
 	recv(cl_dest, buffer, TAM, 0);
-	if (strcmp(buffer, "OK\n")
+	if (strcmp(buffer, "OK\n"))
 		return EXITO;
 	ERROR_MSJ = "El cliente rechazó la conversación\n";
 	return ERROR;
@@ -431,9 +429,9 @@ char* archivo_listar(char* nombre)
 		return NULL;		
 	}
 
-	fseek (pf, 0, SEEK_END);
-  	lsize = ftell (pf);
-	rewind (pf);
+    fseek (pf, 0, SEEK_END);
+    lsize = ftell (pf);
+    rewind (pf);
 
 	buffer = (char*) malloc (sizeof(char)*lsize);
 	if (buffer == NULL)

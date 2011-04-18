@@ -47,7 +47,8 @@ int registrar_usuario(char *);
 
 void broadcast_clientes(char *);
 int cliente_charlemos(int, int);
-int mandar_msj(int, int, char*)
+int mandar_msj(int, int, char*);
+int verificar_conversacion(int, int);
 
 int obtener_id_nombre(char*);
 char* obtener_nombre_id(int);
