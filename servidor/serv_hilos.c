@@ -75,7 +75,7 @@ int iniciar_servidor (int puerto)
 	}
 
 	/*printf ("## creando logs...\n");
-	if ((archivo_crear("clientes") != EXITO) || (archivo_crear("serv.log") != EXITO))
+	if ((archivo_crear("clientes") != EXITO) || (archivo_crear("serv.log") != EXITO) || (archivo_crear("chat.log") != EXITO))
 	{
 		printf("ERROR creando logs!!!\n");
 		return -1;
@@ -191,12 +191,21 @@ void *ejec_cliente(void *ptr)
 				break;
 
 			case EXITO_CL_CHARL:
-				/*cliente_destino = strtok(buffer_entrada,"\"")
+				tmp = strtok(buffer_entrada,"\"")
 				while(cliente_destino != NULL)
 				{
-					cliente_destino = strtok(NULL,"\"");
+					tmp = strtok(NULL,"\"");
 				}
-				iniciar_conversacion(isc, cliente_destino);*/
+				/*iniciar_conversacion(isc, cliente_destino);*/
+				strcat(buffer_envio, (char*) isc);
+				strcat(buffer_envio, " - ");
+				strcat(buffer_envio, obtener_id_nombre(tmp));
+				if(loguear("chat.log", buffer_envio) == ERROR)
+				{
+					printf("Error logueando: %s", ERROR_LOG);
+					strcat(resp_servidor,"ERROR");
+					break;
+				}
 				strcat(resp_servidor,"CONTROL DALE"); // Con el "dale" lo estoy habilitando a que utilice el MSG con el usuario
 				break;
 			case ERROR_CL_CHARL:
@@ -215,7 +224,7 @@ void *ejec_cliente(void *ptr)
 					strcat(resp_servidor,"MSG_OK");
 				}
 				else
-					strcat(resp_servidor,"Error al enviar msg. Intente nuevamente.");
+					strcat(resp_servidor,"Error al enviar msj. Intente nuevamente.");
 			case ERROR_VER_CONV:
 				strcat(resp_servidor, ERROR_MSJ);
 
@@ -303,6 +312,31 @@ int verificar_msj(char * buffer_entrada, int ssock)
 		}
 	}
 	return 0;
+}
+
+// busco en el log si esta habilitada la conversacion
+int verificar_conversacion(int s_origen, int s_dest)
+{
+    char* buffer;
+	char* buscar;
+    FILE *pf;
+    
+    if ((pf = fopen("chat.log", r)) == NULL)
+        return ERROR;
+    
+    if ((buffer = archivo_listar("chat.log")) == NULL)
+        return ERROR;
+
+	strcat(buscar, (char*) s_origen);
+	strcat(buscar, " - ");
+	strcat(buscar, (char*) s_dest);
+
+	if (strstr(buffer, buscar) == NULL)
+		return ERROR_VER_CONV;
+	else
+		return EXITO_VER_CONV;
+
+	return ERROR;
 }
 
 int obtener_id_nombre(char* nombre)
