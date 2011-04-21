@@ -8,6 +8,9 @@
 #define EXITO 0
 #define ERROR 1
 
+#define ON	1
+#define OFF	-1
+
 #define EXITO_REG_CLIENTE 10
 #define ERROR_REG_CLIENTE 11
 #define EXITO_CL_CHARL	20
@@ -19,11 +22,17 @@
 
 typedef struct ptr 
 {
-	pthread_t _id_thread_;	// id_thread encargado de la conexion
+	pthread_t _id_thread_;		// id_thread encargado de la conexion
 	int _id_socket_;			// id_socket
-	char* _nombre_;			// nombre del cliente (nickname)
+	char* _nombre_;				// nombre del cliente (nickname)
 	struct ptr *_next_;
 } lista_pt;
+
+typedef struct mensaje_cola
+{
+	long int tipo;			// Cada elemento lleva untipo asociado con el cliente al que pertenece
+	char msj[TAM];			// Mensaje que contiene.
+} elem_cola;
 
 void list_print(lista_pt *); 
 lista_pt **list_search_d1(lista_pt **, pthread_t);

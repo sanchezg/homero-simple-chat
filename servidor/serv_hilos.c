@@ -8,15 +8,20 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <regex.h>
+#include <iostream.h>
+#include <sys/msg.h>
 #include "serv_hilos.h"
 
-int SERVER_ACTIVO;
+int SERVER_ACTIVO, ID_COLA;
 char * ERROR_MSJ;
+key_t K_COLA;
+elem_cola COLA_GRAL;
 
 pthread_mutex_t mutex_archivo_clientes = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_write_buffer = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_listapt = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_archivo_log = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_cola_msj = PTHREAD_MUTEX_INITIALIZER;
 
 lista_pt *thread = NULL;
 
@@ -40,6 +45,7 @@ int main(int argc, char *argv[])
 /*
 	archivo_borrar("clientes");
 	archivo_borrar("serv.log");
+	archivo_borrar("chat.log");
 */
 	exit(EXIT_SUCCESS);
 }
@@ -96,7 +102,13 @@ int iniciar_servidor (int puerto)
 void* ejec_servidor(void *ptr)
 {
 	int *iptr, des_servidor, des_cliente;
-//	lista_pt *thread = NULL;
+	//	lista_pt *thread = NULL;
+
+	if(iniciar_cola() == ERROR)
+	{
+		printf("Error al abrir cola de mensajes. Abortado\n");
+		exit(EXIT_FAILURE);
+	}
 
 	iptr = (int *) ptr;
 	des_servidor = *iptr;
@@ -108,6 +120,19 @@ void* ejec_servidor(void *ptr)
 			exit(EXIT_FAILURE);
 	}
 	return NULL;
+}
+
+int iniciar_cola()
+{
+	K_COLA = ftok ("/bin/ls", 33);		//Primero obtengo un KEY para la Q
+	if (K_COLA == (key_t)-1)
+		return ERROR;
+
+	ID_COLA = msgget (K_COLA, 0600 | IPC_CREAT);	//Segundo obtengo el ID de esa Q
+	if (ID_COLA == -1)
+		return ERROR;
+
+	return EXITO;
 }
 
 int aceptar_conexion(int socket)
@@ -150,7 +175,7 @@ int nuevo_cliente(lista_pt **n, int dsc)
 
 void *ejec_cliente(void *ptr)
 {
-	int *iptr, isc;
+	int *iptr, isc, flag_pendiente;
 	size_t clilen;
 	struct sockaddr_in cli_addr;
 	struct sockaddr_in* s;
@@ -173,7 +198,7 @@ void *ejec_cliente(void *ptr)
 		exit(EXIT_FAILURE);
 	}
 
-	while ((strcmp(buffer,"CTRL exit\n") != 0) && (getpeername(isc, (struct sockaddr*) &cli_addr, &clilen) == 0))
+	while ((strcmp(buffer,"exit\n") != 0) && (getpeername(isc, (struct sockaddr*) &cli_addr, &clilen) == 0))
 	{
 		printf("%s:%d say:%s", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
 
@@ -191,25 +216,32 @@ void *ejec_cliente(void *ptr)
 				break;
 
 			case EXITO_CL_CHARL:
-				tmp = strtok(buffer_entrada,"\"")
-				while(cliente_destino != NULL)
-				{
-					tmp = strtok(NULL,"\"");
-				}
+				tmp = strtok(buffer,"\"");
+				while(tmp != NULL)
+					tmp = strtok(NULL,"\"");						//obtiene el nombre del chatero
 				/*iniciar_conversacion(isc, cliente_destino);*/
 				strcat(buffer_envio, (char*) isc);
 				strcat(buffer_envio, " - ");
-				strcat(buffer_envio, obtener_id_nombre(tmp));
-				if(loguear("chat.log", buffer_envio) == ERROR)
+				strcat(buffer_envio, (char*) obtener_id_nombre(tmp));
+				/*if(loguear("chat.log", buffer_envio) == ERROR)
 				{
 					printf("Error logueando: %s", ERROR_LOG);
 					strcat(resp_servidor,"ERROR");
 					break;
-				}
-				strcat(resp_servidor,"CONTROL DALE"); // Con el "dale" lo estoy habilitando a que utilice el MSG con el usuario
+				}*/
+				strcat(resp_servidor,"CTRL DALE \" "); // Con el "dale" lo estoy habilitando a que utilice el MSG con el usuario
+				strcat(resp_servidor, tmp);
+				strcat(resp_servidor, " \"");
 				break;
 			case ERROR_CL_CHARL:
-				// ************************ HACER ALGO!!!!!!!!!!!!!!!!!
+				tmp = strtok(buffer,"\"");
+				while(tmp != NULL)
+					tmp = strtok(NULL,"\"");
+
+				strcat(resp_servidor, "CTRL NO \" ");
+				strcat(resp_servidor, tmp);
+				strcat(resp_servidor, " \"");
+				//loguear(ERROR_MSJ);
 				break;
 
 			case EXITO_VER_CONV:
@@ -220,9 +252,7 @@ void *ejec_cliente(void *ptr)
 				}
 				strcat(buffer_envio, tmp);
 				if(mandar_msj(isc, obtener_id_nombre(tmp), buffer_envio) == EXITO)
-				{
 					strcat(resp_servidor,"MSG_OK");
-				}
 				else
 					strcat(resp_servidor,"Error al enviar msj. Intente nuevamente.");
 			case ERROR_VER_CONV:
@@ -235,7 +265,22 @@ void *ejec_cliente(void *ptr)
 
 		ERROR_MSJ = "";
 		strcat(resp_servidor, "\r\n");
-		write(isc, resp_servidor, TAM);
+
+		//verificar si llegué hasta aca por un msj de cola o por un msj de socket
+		if (flag_pendiente == ON)
+			flag_pendiente = OFF;
+		else
+			write(isc, resp_servidor, TAM);
+
+		//verificar si hay msj para mi, y activar el flag para que salte el read y write del socket
+		pthread_mutex_lock(&mutex_cola_msj);
+		if (msgrcv (ID_COLA, (struct msgbuf *)&COLA_GRAL, sizeof(COLA_GRAL.tipo) + sizeof(COLA_GRAL.msj), isc, IPC_NOWAIT) > 0)
+		{
+			pthread_mutex_unlock(&mutex_cola_msj);
+			flag_pendiente = ON;
+			continue;
+		}
+		pthread_mutex_unlock(&mutex_cola_msj);
 
 		memset(buffer, 0, TAM);
 		if (read(isc, buffer, TAM-1) < 0) 
@@ -280,10 +325,7 @@ int verificar_msj(char * buffer_entrada, int ssock)
 			if(cliente_charlemos(ssock, dsock) == EXITO)
 				return EXITO_CL_CHARL;
 			else
-			{
-				//ERROR_MSJ = "El cliente rechazó la conexión\n";
 				return ERROR_CL_CHARL;
-			}
 		}
 		else
 		{
@@ -315,18 +357,21 @@ int verificar_msj(char * buffer_entrada, int ssock)
 }
 
 // busco en el log si esta habilitada la conversacion
+//FUNCION LISTA!
 int verificar_conversacion(int s_origen, int s_dest)
 {
     char* buffer;
 	char* buscar;
     FILE *pf;
     
-    if ((pf = fopen("chat.log", r)) == NULL)
-        return ERROR;
-    
-    if ((buffer = archivo_listar("chat.log")) == NULL)
+    if ((pf = fopen("chat.log", "r")) == NULL)
         return ERROR;
 
+    buffer = archivo_listar("chat.log");
+    if (buffer == NULL)
+        return ERROR;
+
+	memset(buscar, 0, TAM);
 	strcat(buscar, (char*) s_origen);
 	strcat(buscar, " - ");
 	strcat(buscar, (char*) s_dest);
@@ -339,6 +384,13 @@ int verificar_conversacion(int s_origen, int s_dest)
 	return ERROR;
 }
 
+//POR HACER!!!
+int mandar_msj(int origen, int destino, char* mensaje)
+{
+	//enviar el mensaje al HILO que maneja el 
+}
+
+//Estas dos siguientes no se si andan!!
 int obtener_id_nombre(char* nombre)
 {
 	lista_pt **n = malloc(sizeof(lista_pt*));
@@ -359,8 +411,10 @@ char* obtener_nombre_id(int id)
 		return ((char*) &(*n)->_nombre_);
 }
 
-/*	Preguntar al cliente destino si quiere charlar. 
-	Envia un msj con send con la pregunta, y espera por la rpta. */
+/*	
+	Preguntar al cliente destino si quiere charlar. 
+	Envia un msj a la que con la pregunta, y espera por la rpta. 
+*/
 int cliente_charlemos(int cl_orig, int cl_dest)
 {
 	char* buffer, *nombre_origen;
@@ -370,14 +424,37 @@ int cliente_charlemos(int cl_orig, int cl_dest)
 	strcat(buffer, nombre_origen);
 	strcat(buffer, "\n");
 
+/*
 	if (send(cl_dest, buffer, TAM, 0) < 0)
 	{
 		ERROR_MSJ = "Error al tratar de contactar, intente nuevamente\n";
 		return ERROR;
 	}
-
+	
 	memset(buffer, 0, TAM);
-	recv(cl_dest, buffer, TAM, 0);
+	recv(cl_dest, buffer, TAM, 0); //leer_cola
+*/
+	pthread_mutex_lock(&mutex_cola_msj);
+	COLA_GRAL.tipo = cl_dest;
+	strcpy(COLA_GRAL.msj, buffer);
+	msgsnd(ID_COLA, (struct msgbuf *) &COLA_GRAL, sizeof(COLA_GRAL.msj), IPC_NOWAIT);		//Primero enviar la preugnta si quiere charlar ...
+	pthread_mutex_unlock(&mutex_cola_msj);
+
+	usleep(100000); //dormir cien miliseg
+	pthread_mutex_lock(&mutex_cola_msj);
+	while (msgrcv(ID_COLA, (struct msgbuf *) &COLA_GRAL, sizeof(COLA_GRAL.msj), cl_orig, IPC_NOWAIT) < 0)
+	{
+		//es porque no hay msg todavia
+		pthread_mutex_unlock(&mutex_cola_msj);
+		usleep(100000); //esperar cien miliseg
+		pthread_mutex_lock(&mutex_cola_msj);
+	}
+
+	//salió es porque ya recibió el msj...
+	memset(buffer, 0, TAM);
+	strcpy(buffer, COLA_GRAL.msj);
+	pthread_mutex_unlock(&mutex_cola_msj);
+
 	if (strcmp(buffer, "OK\n"))
 		return EXITO;
 	ERROR_MSJ = "El cliente rechazó la conversación\n";
