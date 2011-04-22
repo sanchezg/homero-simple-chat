@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <netdb.h> 
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "cliente.h"
 
@@ -14,8 +15,10 @@ char* MSJ_SALIDA;
 
 int main( int argc, char *argv[] ) 
 {
-	int mi_socket, flag_msj_serv = 0;
+	int mi_socket, flag_msj_serv = OFF;
 	char buffer[TAM];
+
+	system("clear");
 
 	if (argc < 2) 
 	{
@@ -35,69 +38,65 @@ int main( int argc, char *argv[] )
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Ingrese MSG inicial: ");
-/*	printf("\t\tBienvenido a Homero-Simple-Chat.\n\tIngrese un comando:\
-			\n\t<nickname> CTRL HOLA: Se registra con el servidor.\
-			\n\tCTRL LISTAR: Muestra los usuarios conectados.\
-			\n\tCTRL CHARLEMOS \"destino\": Trata de iniciar una conversación con usuario \"destino\"\
-			\n\tMSG <destino> \"Mensaje\": Transmite \"Mensaje\" al usuario <destino>\
-			(Es necesario haber iniciado la conversación antes)."\
-			\n\tmenu: muestra este menú.\
-			\n\texit: sale del programa.");
+/*	memset(buffer, ' ', TAM);
+	if (read(mi_socket, buffer, TAM) < 0)
+	{
+		perror("read");
+		exit(EXIT_FAILURE);
+	}
 */
-	memset(buffer, '0', TAM);
-	fgets(buffer, TAM-1, stdin);
+	printf(MENU_MSJ);
+	printf(PROMPT);
+
+	memset(buffer, ' ', TAM);
+	fgets(buffer, TAM, stdin);
 
 	while (strcmp(buffer,"exit\n") != 0)
 	{
-		if (flag_msj_serv == 0)
+		if (write(mi_socket, buffer, strlen(buffer)) < 0) 
 		{
-			if (write(mi_socket, buffer, strlen(buffer)) < 0) 
-			{
-				perror("write");
-				exit(EXIT_FAILURE);
-			}
-
-			memset (buffer, '\0', TAM );
-		
-			if (read(mi_socket, buffer, TAM) < 0)
-			{
-				perror("read");
-				exit(EXIT_FAILURE);
-			}
+			perror("write");
+			exit(EXIT_FAILURE);
+		}
+	
+		memset(buffer, ' ', TAM );
+		if (read(mi_socket, buffer, TAM) < 0)
+		{
+			perror("read");
+			exit(EXIT_FAILURE);
 		}
 
 		switch (verificar_msj(buffer))
 		{
+			case EXITO_CONEX:
+				break;
+
 			case EXITO_REG:
 				printf("Registro exitoso.\n");
-				memset(buffer, '0', TAM);
+				memset(buffer, ' ', TAM);
 				break;
 			case ERROR_REG:
 				printf("Registro rechazado. Msj servidor: %s\n", MSJ_SALIDA);
-				memset(buffer, '0', TAM);
+				memset(buffer, ' ', TAM);
 				break;
+
 			case ENTRO_ALGUIEN:
 				printf("## servidor: %s\n", buffer);
 				break;
+
+			case EXITO_CHAT:
+				printf("El cliente aceptó el chat.\n");
+			case ERROR_CHAT:
+				printf("No disponible\n");
+
 			default:
 				break;
 		}
 
-		//verificar si el servidor mandó algún msj...
-/*		memset(buffer, '0', TAM);
-		if (recv (mi_socket, buffer, TAM, 0) != -1)
-		{
-			flag_msj_serv = 1;
-			continue;
-		}*/
-
-//		printf("srv: %s\n", buffer);
-//		printf("usr: ");
-		//sino esperar por la entrada de teclado, y seguir...
-		memset(buffer, '0', TAM);
-		fgets(buffer, TAM-1, stdin);
+		memset(buffer, ' ', TAM);
+		fgets(buffer, TAM, stdin);
 	}
+
 	puts("Hasta la proxima, baby..");
 	if (write(mi_socket, buffer, strlen(buffer)) < 0) 
 	{
@@ -112,16 +111,24 @@ int verificar_msj(char * buffer)
 {
 	char *temp;
 
-	if (strstr(buffer, "CTRL QUETAL\n"))
+	if (strstr(buffer, "_MSJ_OK_"))
+		return _MSJ_OK_;
+
+	if (strstr(buffer, "CTRL QUETAL"))
 		return EXITO_REG;
 	if (strstr(buffer, "CTRL FUERA"))
 	{
 		temp = strtok(buffer,"\"");
-		while(temp != NULL)
-			temp = strtok(NULL,"\"");
+		//while(temp != NULL)
+		temp = strtok(NULL,"\"");
 		MSJ_SALIDA = temp;
 		return ERROR_REG;
 	}
+	if (strstr(buffer, "CTRL DALE"))
+		return EXITO_CHAT;
+	if (strstr(buffer, "CTRL NO"))
+		return ERROR_CHAT;
+	
 	if (strstr(buffer, "CTRL ENTRO"))
 		return ENTRO_ALGUIEN;
 	return ERROR_MSJ;
@@ -129,6 +136,15 @@ int verificar_msj(char * buffer)
 
 int abrir_conexion()
 {
+/*	int mi_socket, sock_opt;
+
+	mi_socket = socket (AF_INET, SOCK_STREAM, 0);
+	sock_opt = fcntl(mi_socket, F_GETFL);
+	if (fcntl(mi_socket, F_SETFL, O_NONBLOCK) )
+		return -1;
+
+	return mi_socket;
+*/
 	return socket (AF_INET, SOCK_STREAM, 0);
 }
 

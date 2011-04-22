@@ -6,9 +6,10 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <arpa/inet.h>
 #include <regex.h>
-#include <iostream.h>
+//#include <iostream.h>
 #include <sys/msg.h>
 #include "serv_hilos.h"
 
@@ -32,6 +33,8 @@ int main(int argc, char *argv[])
 	pthread_t th_conex;
 //	lista_pt *thread = NULL;
 
+	system("clear"); 
+
 	des_servidor = iniciar_servidor(PUERTO);
 
 	if (pthread_create(&th_conex, NULL, ejec_servidor, (void*) &des_servidor) != 0)
@@ -53,7 +56,7 @@ int main(int argc, char *argv[])
 
 int iniciar_servidor (int puerto)
 {
-	int sockfd;
+	int sockfd, sock_opt;
 	struct sockaddr_in serv_addr;
 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -63,6 +66,9 @@ int iniciar_servidor (int puerto)
 		perror("socket");
 		return -1;
 	}
+	sock_opt = fcntl(sockfd, F_GETFL);
+	if (fcntl(sockfd, F_SETFL, sock_opt | O_NONBLOCK))
+		return -1;
 
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -124,11 +130,11 @@ void* ejec_servidor(void *ptr)
 
 int iniciar_cola()
 {
-	K_COLA = ftok ("/bin/ls", 33);		//Primero obtengo un KEY para la Q
+	K_COLA = ftok ("/bin/ls", 33);		//Primero obtengo un KEY para crear la Q
 	if (K_COLA == (key_t)-1)
 		return ERROR;
 
-	ID_COLA = msgget (K_COLA, 0600 | IPC_CREAT);	//Segundo obtengo el ID de esa Q
+	ID_COLA = msgget (K_COLA, 0600 | IPC_CREAT);	//Segundo obtengo el ID de la Q creada
 	if (ID_COLA == -1)
 		return ERROR;
 
@@ -167,15 +173,13 @@ int nuevo_cliente(lista_pt **n, int dsc)
 }
 
 /*
-	ejec_cliente es la rutina que realiza el hilo
-	que se encarga de cada cliente. Tiene que revisar
-	continuamente los msj que envía el cliente, y
-	mandarlos al hilo del servidor.
+	ejec_cliente es la rutina que realiza el hilo que se encarga de cada cliente.
+	Tiene que revisar continuamente los msj que envía el cliente, y tratarlos según sea.
 */
 
 void *ejec_cliente(void *ptr)
 {
-	int *iptr, isc, flag_pendiente;
+	int *iptr, mi_descriptor, flag_pendiente=OFF;
 	size_t clilen;
 	struct sockaddr_in cli_addr;
 	struct sockaddr_in* s;
@@ -183,28 +187,30 @@ void *ejec_cliente(void *ptr)
 	char* tmp;
 
 	iptr = (int *) ptr;
-	isc = *iptr;
+	mi_descriptor = *iptr;
 
 	clilen = sizeof(cli_addr);
 	s = (struct sockaddr_in *) &cli_addr;
-	getpeername(isc, (struct sockaddr*) &cli_addr, &clilen);
+	getpeername(mi_descriptor, (struct sockaddr*) &cli_addr, &clilen);
 	
 	printf("hilo %lu del cliente %s\n", pthread_self(), inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr));
 
-	memset(buffer, 0, TAM);
-	if (read(isc, buffer, TAM-1) < 0) 
+	memset(buffer, ' ', TAM);
+	if (read(mi_descriptor, buffer, TAM-1) < 0) 
 	{
 		perror("read");
 		exit(EXIT_FAILURE);
 	}
+	printf("%s:%d say:%s", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
 
-	while ((strcmp(buffer,"exit\n") != 0) && (getpeername(isc, (struct sockaddr*) &cli_addr, &clilen) == 0))
+	//while ((strcmp(buffer,"exit\n") != 0) && (getpeername(mi_descriptor, (struct sockaddr*) &cli_addr, &clilen) == 0))
+	do
 	{
-		printf("%s:%d say:%s", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
+		//printf("%s:%d say:%s", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
 
-		memset(resp_servidor, 0, TAM);
+		memset(resp_servidor, ' ', TAM);
 
-		switch (verificar_msj(buffer, isc))
+		switch (verificar_msj(buffer, mi_descriptor))
 		{
 			case EXITO_REG_CLIENTE:
 				strcat(resp_servidor, "CTRL QUETAL");
@@ -216,11 +222,12 @@ void *ejec_cliente(void *ptr)
 				break;
 
 			case EXITO_CL_CHARL:
+				//obtiene el nombre del chatero
 				tmp = strtok(buffer,"\"");
-				while(tmp != NULL)
-					tmp = strtok(NULL,"\"");						//obtiene el nombre del chatero
-				/*iniciar_conversacion(isc, cliente_destino);*/
-				strcat(buffer_envio, (char*) isc);
+				//while(tmp != NULL)
+				tmp = strtok(NULL,"\"");						
+
+				strcat(buffer_envio, (char*) mi_descriptor);
 				strcat(buffer_envio, " - ");
 				strcat(buffer_envio, (char*) obtener_id_nombre(tmp));
 				/*if(loguear("chat.log", buffer_envio) == ERROR)
@@ -229,30 +236,33 @@ void *ejec_cliente(void *ptr)
 					strcat(resp_servidor,"ERROR");
 					break;
 				}*/
-				strcat(resp_servidor,"CTRL DALE \" "); // Con el "dale" lo estoy habilitando a que utilice el MSG con el usuario
+				// Con el "dale" lo estoy habilitando a que utilice el MSG con el usuario
+				strcat(resp_servidor,"CTRL DALE \" "); 
 				strcat(resp_servidor, tmp);
 				strcat(resp_servidor, " \"");
 				break;
 			case ERROR_CL_CHARL:
 				tmp = strtok(buffer,"\"");
-				while(tmp != NULL)
-					tmp = strtok(NULL,"\"");
+				//while(tmp != NULL)
+				tmp = strtok(NULL,"\"");
 
 				strcat(resp_servidor, "CTRL NO \" ");
 				strcat(resp_servidor, tmp);
 				strcat(resp_servidor, " \"");
 				//loguear(ERROR_MSJ);
 				break;
+			case ERROR_CLIENTE_INC:
+				strcat(resp_servidor, "Cliente no encontrado");
+				//loguear(ERROR_MSJ);
+				break;
 
 			case EXITO_VER_CONV:
 				tmp = strtok(buffer,"\"");
-				while(tmp != NULL)
-				{
-					tmp = strtok(NULL,"\"");
-				}
+				//while(tmp != NULL)
+				tmp = strtok(NULL,"\"");
 				strcat(buffer_envio, tmp);
-				if(mandar_msj(isc, obtener_id_nombre(tmp), buffer_envio) == EXITO)
-					strcat(resp_servidor,"MSG_OK");
+				if(mandar_msj(mi_descriptor, obtener_id_nombre(tmp), buffer_envio) == EXITO)
+					strcat(resp_servidor,"_MSG_OK_");
 				else
 					strcat(resp_servidor,"Error al enviar msj. Intente nuevamente.");
 			case ERROR_VER_CONV:
@@ -263,32 +273,69 @@ void *ejec_cliente(void *ptr)
 				break;
 		}
 
-		ERROR_MSJ = "";
+		ERROR_MSJ = " ";
 		strcat(resp_servidor, "\r\n");
+		write(mi_descriptor, resp_servidor, TAM);
+
+		if (flag_pendiente == ON)
+		{
+			flag_pendiente = OFF;
+			memset(resp_servidor, ' ', TAM);
+			strcpy(resp_servidor, );
+		}
+		else
+		{
+
+		}
+
+		//Verificar si hay msj en la cola para mi...
+		pthread_mutex_lock(&mutex_cola_msj);
+		if (msgrcv (ID_COLA, (struct msgbuf *)&COLA_GRAL, sizeof(COLA_GRAL.msj), mi_descriptor, IPC_NOWAIT) > 0)
+		{
+			pthread_mutex_unlock(&mutex_cola_msj);
+			flag_pendiente = ON;
+			strcpy(buffer, COLA_GRAL.msj);
+			continue;
+		}
+
+		if (msgrcv (ID_COLA, (struct msgbuf *)&COLA_GRAL, sizeof(COLA_GRAL.msj), mi_descriptor*10, IPC_NOWAIT) > 0)
+		{
+			pthread_mutex_unlock(&mutex_cola_msj);
+			flag_pendiente = ON;
+			strcpy(buffer, COLA_GRAL.msj);
+			continue;
+		}
+		pthread_mutex_unlock(&mutex_cola_msj);
 
 		//verificar si llegué hasta aca por un msj de cola o por un msj de socket
-		if (flag_pendiente == ON)
-			flag_pendiente = OFF;
-		else
-			write(isc, resp_servidor, TAM);
+/*
 
 		//verificar si hay msj para mi, y activar el flag para que salte el read y write del socket
 		pthread_mutex_lock(&mutex_cola_msj);
-		if (msgrcv (ID_COLA, (struct msgbuf *)&COLA_GRAL, sizeof(COLA_GRAL.tipo) + sizeof(COLA_GRAL.msj), isc, IPC_NOWAIT) > 0)
+		if (msgrcv (ID_COLA, (struct msgbuf *)&COLA_GRAL, sizeof(COLA_GRAL.tipo) + sizeof(COLA_GRAL.msj), mi_descriptor, IPC_NOWAIT) > 0)
 		{
 			pthread_mutex_unlock(&mutex_cola_msj);
 			flag_pendiente = ON;
 			continue;
 		}
-		pthread_mutex_unlock(&mutex_cola_msj);
+		if (msgrcv (ID_COLA, (struct msgbuf *)&COLA_GRAL, sizeof(COLA_GRAL.tipo) + sizeof(COLA_GRAL.msj), mi_descriptor*10, IPC_NOWAIT) > 0)
+		{
+			pthread_mutex_unlock(&mutex_cola_msj);
+			flag_pendiente = ON;
+			continue;
+		}
 
-		memset(buffer, 0, TAM);
-		if (read(isc, buffer, TAM-1) < 0) 
+		pthread_mutex_unlock(&mutex_cola_msj);
+//		printf ("despues de verificar cola\n");
+*/		memset(buffer, ' ', TAM);
+		if (read(mi_descriptor, buffer, TAM) < 0) 
 		{
 			perror("read");
 			exit(EXIT_FAILURE);
 		}
+
 	}
+	while ((strcmp(buffer,"exit\n") != 0) && (getpeername(mi_descriptor, (struct sockaddr*) &cli_addr, &clilen) == 0));
 
 	printf("hilo %lu finalizado\n", pthread_self());
 	return NULL;
@@ -298,13 +345,17 @@ void *ejec_cliente(void *ptr)
 int verificar_msj(char * buffer_entrada, int ssock)
 {
 	char* temp;
+	char msjtemp[16];
 	int i, dsock;
 
 	/* Primero verificar por registro */
 	if (strstr(buffer_entrada,"CTRL HOLA") != NULL)
 	{
 		if (registrar_usuario(strtok(buffer_entrada," ")) == EXITO)
+		{
+			//printf ("return de verificar_msj\n");
 			return EXITO_REG_CLIENTE;
+		}
 		else
 			return ERROR_REG_CLIENTE;
 	}
@@ -312,24 +363,38 @@ int verificar_msj(char * buffer_entrada, int ssock)
 	/* Verificar por inicio chat */
 	if (strstr(buffer_entrada,"CTRL CHARLEMOS") != NULL)
 	{
+		i=0;
+		//printf("estoy fijandome el nick\n");
 		temp = strtok(buffer_entrada,"\"");
-		while(temp != NULL)
+		while((temp = strtok(NULL,"\"")) != NULL)
 		{
-			temp = strtok(NULL,"\"");
+			if(i==0)
+				strcpy(msjtemp, temp);
+			i++;
 		}
 		pthread_mutex_lock(&mutex_archivo_clientes);
-		if (archivo_buscar("clientes", temp) == EXITO)
+		printf("bloqueo el arc clientes\n");
+		if (archivo_buscar("clientes", msjtemp) == EXITO)
 		{
+			printf("ya busco y dio exito\n");
 			pthread_mutex_unlock(&mutex_archivo_clientes);
 			dsock = obtener_id_nombre(temp);
+			printf("dsock obtenido: %d", dsock);
 			if(cliente_charlemos(ssock, dsock) == EXITO)
+			{
+				printf("exito en cl_charl\n");
 				return EXITO_CL_CHARL;
+			}
 			else
+			{
+				printf("error en cl_charl\n");
 				return ERROR_CL_CHARL;
+			}
 		}
 		else
 		{
 			pthread_mutex_unlock(&mutex_archivo_clientes);
+			printf("busco y dio error, no encontro\n");
 			ERROR_MSJ = "No se encuentra el cliente\n";
 			return ERROR_CLIENTE_INC;
 		}
@@ -357,11 +422,10 @@ int verificar_msj(char * buffer_entrada, int ssock)
 }
 
 // busco en el log si esta habilitada la conversacion
-//FUNCION LISTA!
 int verificar_conversacion(int s_origen, int s_dest)
 {
     char* buffer;
-	char* buscar;
+	char buscar[TAM];
     FILE *pf;
     
     if ((pf = fopen("chat.log", "r")) == NULL)
@@ -384,10 +448,24 @@ int verificar_conversacion(int s_origen, int s_dest)
 	return ERROR;
 }
 
-//POR HACER!!!
+//poner el msj en la cola, con tipo==cliente_destino
 int mandar_msj(int origen, int destino, char* mensaje)
 {
-	//enviar el mensaje al HILO que maneja el 
+	char buffer[TAM];
+
+	memset(buffer, 0, TAM);
+	strcat(buffer, mensaje);
+
+	pthread_mutex_lock(&mutex_cola_msj);
+	COLA_GRAL.tipo = destino*10;		//destino*10 indica que el msj es de chat
+	strcpy(COLA_GRAL.msj, buffer);
+	if(msgsnd(ID_COLA, (struct msgbuf *) &COLA_GRAL, sizeof(COLA_GRAL.msj), IPC_NOWAIT) != 0)
+	{
+		pthread_mutex_unlock(&mutex_cola_msj);
+		return ERROR;
+	}
+	pthread_mutex_unlock(&mutex_cola_msj);
+	return EXITO;
 }
 
 //Estas dos siguientes no se si andan!!
@@ -395,7 +473,7 @@ int obtener_id_nombre(char* nombre)
 {
 	lista_pt **n = malloc(sizeof(lista_pt*));
 
-	if ((n == list_search_d3(&thread, nombre)) == NULL)
+	if ((n = list_search_d3(&thread, nombre)) == NULL)
 		return -1;
 	else
 		return ((int) &(*n)->_id_socket_);
@@ -405,7 +483,7 @@ char* obtener_nombre_id(int id)
 {
 	lista_pt **n = malloc(sizeof(lista_pt));
 
-	if ((n == list_search_d2(&thread, id)) == NULL)
+	if ((n = list_search_d2(&thread, id)) == NULL)
 		return NULL;
 	else
 		return ((char*) &(*n)->_nombre_);
@@ -417,8 +495,10 @@ char* obtener_nombre_id(int id)
 */
 int cliente_charlemos(int cl_orig, int cl_dest)
 {
-	char* buffer, *nombre_origen;
+	char *nombre_origen;
+	char buffer[TAM];
 
+	memset(buffer, 0, TAM);
 	nombre_origen = obtener_nombre_id(cl_orig);
 	strcat(buffer, "CTRL CHAT: ");
 	strcat(buffer, nombre_origen);
@@ -463,10 +543,10 @@ int cliente_charlemos(int cl_orig, int cl_dest)
 
 int registrar_usuario(char *nombre)
 {
-	regex_t regex;
+/*	regex_t regex;
     int reti;
-	char msgbuf[100];
-
+	char msgbuf[100]; */
+/*
 	reti = regcomp(&regex, "[[:alnum:]]", 0);
     if (reti)
 	{
@@ -486,7 +566,7 @@ int registrar_usuario(char *nombre)
 		return ERROR;
 	}
 	regfree(&regex);
-
+*/
 	//Si llego hasta acá es porque el nombre está bien...
 	//Hay que bloquear el archivo para saber que no lo va a usar otro thread...
 	pthread_mutex_lock(&mutex_archivo_clientes);
@@ -495,9 +575,11 @@ int registrar_usuario(char *nombre)
 		if(archivo_agregar("clientes", nombre) == EXITO)
 		{
 			pthread_mutex_unlock(&mutex_archivo_clientes);
+			//printf ("hago el unlock despues de agregar\n");
 			pthread_mutex_lock(&mutex_listapt);
 			// inlcuir en la lista el nombre del cliente...
 			pthread_mutex_unlock(&mutex_listapt);
+			//printf ("return de reg_usuario\n");
 			return EXITO;
 		}
 		else
@@ -557,7 +639,7 @@ char* archivo_listar(char* nombre)
 		fclose(pf);
 		return NULL;
 	}
-	
+	fclose(pf);
 	return buffer;
 }
 

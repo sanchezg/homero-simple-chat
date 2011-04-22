@@ -45,6 +45,7 @@ void *ejec_cliente(void *);
 int nuevo_cliente(lista_pt **, int);
 int aceptar_conexion(int);
 int iniciar_servidor (int);
+int iniciar_cola();
 int list_len(lista_pt *);
 void* ejec_servidor(void *);
 int verificar_msj(char *, int);
