@@ -10,7 +10,11 @@
 #define OFF	-1
 
 /* Este msj significa que el enviado se recibió correctamente */
-#define _MSJ_OK_ 5 
+/* El cliente no muestra msj en pantalla. */
+#define _MSJ_OK_ 5
+
+/* Este msj indica que hay una solicitud de chat. */
+#define _CHAT_ 6
 
 /* Estos son msj que se reciben y el cliente los utiliza para algún comportamiento específico */
 #define EXITO_REG 10

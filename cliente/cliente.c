@@ -15,8 +15,8 @@ char* MSJ_SALIDA;
 
 int main( int argc, char *argv[] ) 
 {
-	int mi_socket, flag_msj_serv = OFF;
-	char buffer[TAM];
+	int mi_socket;//, flag_msj_serv = OFF;
+	char buffer[TAM], sel[2];
 
 	system("clear");
 
@@ -38,13 +38,6 @@ int main( int argc, char *argv[] )
 		exit(EXIT_FAILURE);
 	}
 
-/*	memset(buffer, ' ', TAM);
-	if (read(mi_socket, buffer, TAM) < 0)
-	{
-		perror("read");
-		exit(EXIT_FAILURE);
-	}
-*/
 	printf(MENU_MSJ);
 	printf(PROMPT);
 
@@ -68,7 +61,7 @@ int main( int argc, char *argv[] )
 
 		switch (verificar_msj(buffer))
 		{
-			case EXITO_CONEX:
+			case _MSJ_OK_:
 				break;
 
 			case EXITO_REG:
@@ -81,7 +74,24 @@ int main( int argc, char *argv[] )
 				break;
 
 			case ENTRO_ALGUIEN:
-				printf("## servidor: %s\n", buffer);
+				printf("##: %s\n", buffer);
+				break;
+
+			case _CHAT_:
+				printf("##: El cliente %s quiere comunicarse, acepta? [y][n]: ", MSJ_SALIDA);
+				fgets(sel, 2, stdin);
+				if (strcmp(sel,"y\n") == 0)
+				{
+					memset(buffer, ' ', TAM);
+					strcpy(buffer, "_OK_");
+					continue;
+				}
+				else
+				{
+					memset(buffer, ' ', TAM);
+					strcpy(buffer, "_NO_");
+					continue;
+				}
 				break;
 
 			case EXITO_CHAT:
@@ -131,6 +141,14 @@ int verificar_msj(char * buffer)
 	
 	if (strstr(buffer, "CTRL ENTRO"))
 		return ENTRO_ALGUIEN;
+
+	if (strstr(buffer, "_CHAT: "))
+	{
+		MSJ_SALIDA = strtok(buffer, " \n");
+		MSJ_SALIDA = strtok(NULL, " \n");
+		return _CHAT_;
+	}
+
 	return ERROR_MSJ;
 }
 

@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
 
 int iniciar_servidor (int puerto)
 {
-	int sockfd, sock_opt;
+	int sockfd;
 	struct sockaddr_in serv_addr;
 
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -66,9 +66,6 @@ int iniciar_servidor (int puerto)
 		perror("socket");
 		return -1;
 	}
-	sock_opt = fcntl(sockfd, F_GETFL);
-	if (fcntl(sockfd, F_SETFL, sock_opt | O_NONBLOCK))
-		return -1;
 
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -236,7 +233,7 @@ void *ejec_cliente(void *ptr)
 					strcat(resp_servidor,"ERROR");
 					break;
 				}*/
-				// Con el "dale" lo estoy habilitando a que utilice el MSG con el usuario
+
 				strcat(resp_servidor,"CTRL DALE \" "); 
 				strcat(resp_servidor, tmp);
 				strcat(resp_servidor, " \"");
@@ -272,23 +269,9 @@ void *ejec_cliente(void *ptr)
 				strcat(resp_servidor, "ERROR desconocido");
 				break;
 		}
-
 		ERROR_MSJ = " ";
-		strcat(resp_servidor, "\r\n");
-		write(mi_descriptor, resp_servidor, TAM);
 
-		if (flag_pendiente == ON)
-		{
-			flag_pendiente = OFF;
-			memset(resp_servidor, ' ', TAM);
-			strcpy(resp_servidor, );
-		}
-		else
-		{
-
-		}
-
-		//Verificar si hay msj en la cola para mi...
+		/* Verificar si hay msj en la cola para mi. */
 		pthread_mutex_lock(&mutex_cola_msj);
 		if (msgrcv (ID_COLA, (struct msgbuf *)&COLA_GRAL, sizeof(COLA_GRAL.msj), mi_descriptor, IPC_NOWAIT) > 0)
 		{
@@ -307,27 +290,19 @@ void *ejec_cliente(void *ptr)
 		}
 		pthread_mutex_unlock(&mutex_cola_msj);
 
-		//verificar si llegué hasta aca por un msj de cola o por un msj de socket
-/*
-
-		//verificar si hay msj para mi, y activar el flag para que salte el read y write del socket
-		pthread_mutex_lock(&mutex_cola_msj);
-		if (msgrcv (ID_COLA, (struct msgbuf *)&COLA_GRAL, sizeof(COLA_GRAL.tipo) + sizeof(COLA_GRAL.msj), mi_descriptor, IPC_NOWAIT) > 0)
+		if(flag_pendiente == ON)
 		{
-			pthread_mutex_unlock(&mutex_cola_msj);
-			flag_pendiente = ON;
-			continue;
+			flag_pendiente = OFF;
+			strcat(buffer, "\r\n");
+			write(mi_descriptor, buffer, TAM);			
 		}
-		if (msgrcv (ID_COLA, (struct msgbuf *)&COLA_GRAL, sizeof(COLA_GRAL.tipo) + sizeof(COLA_GRAL.msj), mi_descriptor*10, IPC_NOWAIT) > 0)
+		else
 		{
-			pthread_mutex_unlock(&mutex_cola_msj);
-			flag_pendiente = ON;
-			continue;
+			strcat(resp_servidor, "\r\n");
+			write(mi_descriptor, resp_servidor, TAM);
 		}
 
-		pthread_mutex_unlock(&mutex_cola_msj);
-//		printf ("despues de verificar cola\n");
-*/		memset(buffer, ' ', TAM);
+		memset(buffer, ' ', TAM);
 		if (read(mi_descriptor, buffer, TAM) < 0) 
 		{
 			perror("read");
@@ -363,26 +338,28 @@ int verificar_msj(char * buffer_entrada, int ssock)
 	/* Verificar por inicio chat */
 	if (strstr(buffer_entrada,"CTRL CHARLEMOS") != NULL)
 	{
-		i=0;
-		//printf("estoy fijandome el nick\n");
+//		i=0;
 		temp = strtok(buffer_entrada,"\"");
-		while((temp = strtok(NULL,"\"")) != NULL)
+		temp = strtok(NULL,"\"");
+		strcpy(msjtemp, temp);
+/*		while((temp = strtok(NULL,"\"")) != NULL)
 		{
 			if(i==0)
 				strcpy(msjtemp, temp);
 			i++;
 		}
+*/
 		pthread_mutex_lock(&mutex_archivo_clientes);
 		printf("bloqueo el arc clientes\n");
 		if (archivo_buscar("clientes", msjtemp) == EXITO)
 		{
-			printf("ya busco y dio exito\n");
+//			printf("ya busco y dio exito\n");
 			pthread_mutex_unlock(&mutex_archivo_clientes);
 			dsock = obtener_id_nombre(temp);
-			printf("dsock obtenido: %d", dsock);
+//			printf("dsock obtenido: %d", dsock);
 			if(cliente_charlemos(ssock, dsock) == EXITO)
 			{
-				printf("exito en cl_charl\n");
+//				printf("exito en cl_charl\n");
 				return EXITO_CL_CHARL;
 			}
 			else
@@ -498,22 +475,12 @@ int cliente_charlemos(int cl_orig, int cl_dest)
 	char *nombre_origen;
 	char buffer[TAM];
 
-	memset(buffer, 0, TAM);
+	memset(buffer, ' ', TAM);
 	nombre_origen = obtener_nombre_id(cl_orig);
-	strcat(buffer, "CTRL CHAT: ");
+	strcpy(buffer, "_CHAT: ");
 	strcat(buffer, nombre_origen);
 	strcat(buffer, "\n");
 
-/*
-	if (send(cl_dest, buffer, TAM, 0) < 0)
-	{
-		ERROR_MSJ = "Error al tratar de contactar, intente nuevamente\n";
-		return ERROR;
-	}
-	
-	memset(buffer, 0, TAM);
-	recv(cl_dest, buffer, TAM, 0); //leer_cola
-*/
 	pthread_mutex_lock(&mutex_cola_msj);
 	COLA_GRAL.tipo = cl_dest;
 	strcpy(COLA_GRAL.msj, buffer);
@@ -535,7 +502,7 @@ int cliente_charlemos(int cl_orig, int cl_dest)
 	strcpy(buffer, COLA_GRAL.msj);
 	pthread_mutex_unlock(&mutex_cola_msj);
 
-	if (strcmp(buffer, "OK\n"))
+	if (strstr(buffer, "_OK_"))
 		return EXITO;
 	ERROR_MSJ = "El cliente rechazó la conversación\n";
 	return ERROR;
