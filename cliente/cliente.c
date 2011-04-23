@@ -41,7 +41,7 @@ int main( int argc, char *argv[] )
 	printf(MENU_MSJ);
 	printf(PROMPT);
 
-	memset(buffer, ' ', TAM);
+	memset(buffer, '\0', TAM);
 	fgets(buffer, TAM, stdin);
 
 	while (strcmp(buffer,"exit\n") != 0)
@@ -52,7 +52,7 @@ int main( int argc, char *argv[] )
 			exit(EXIT_FAILURE);
 		}
 	
-		memset(buffer, ' ', TAM );
+		memset(buffer, '\0', TAM );
 		if (read(mi_socket, buffer, TAM) < 0)
 		{
 			perror("read");
@@ -65,20 +65,24 @@ int main( int argc, char *argv[] )
 				break;
 
 			case EXITO_REG:
-				printf("Registro exitoso.\n");
+				printf("# Registro exitoso.\n");
 				memset(buffer, ' ', TAM);
 				break;
 			case ERROR_REG:
-				printf("Registro rechazado. Msj servidor: %s\n", MSJ_SALIDA);
+				printf("# Registro rechazado. Msj servidor: %s\n", MSJ_SALIDA);
 				memset(buffer, ' ', TAM);
 				break;
 
 			case ENTRO_ALGUIEN:
-				printf("##: %s\n", buffer);
+				printf("# %s\n", buffer);
+				break;
+
+			case ERR_CL_NO:
+				printf("# Cliente no registrado\n");
 				break;
 
 			case _CHAT_:
-				printf("##: El cliente %s quiere comunicarse, acepta? [y][n]: ", MSJ_SALIDA);
+				printf("# El cliente %s quiere comunicarse, acepta? [y][n]: ", MSJ_SALIDA);
 				fgets(sel, 2, stdin);
 				if (strcmp(sel,"y\n") == 0)
 				{
@@ -103,7 +107,8 @@ int main( int argc, char *argv[] )
 				break;
 		}
 
-		memset(buffer, ' ', TAM);
+		printf(PROMPT);
+		memset(buffer, '\0', TAM);
 		fgets(buffer, TAM, stdin);
 	}
 
@@ -134,6 +139,10 @@ int verificar_msj(char * buffer)
 		MSJ_SALIDA = temp;
 		return ERROR_REG;
 	}
+
+	if (strstr(buffer, "_CL_NO_"))
+		return ERR_CL_NO;
+
 	if (strstr(buffer, "CTRL DALE"))
 		return EXITO_CHAT;
 	if (strstr(buffer, "CTRL NO"))

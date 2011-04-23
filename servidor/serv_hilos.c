@@ -192,20 +192,19 @@ void *ejec_cliente(void *ptr)
 	
 	printf("hilo %lu del cliente %s\n", pthread_self(), inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr));
 
-	memset(buffer, ' ', TAM);
+	memset(buffer, '\0', TAM);
 	if (read(mi_descriptor, buffer, TAM-1) < 0) 
 	{
 		perror("read");
 		exit(EXIT_FAILURE);
 	}
-	printf("%s:%d say:%s", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
-
+	
 	//while ((strcmp(buffer,"exit\n") != 0) && (getpeername(mi_descriptor, (struct sockaddr*) &cli_addr, &clilen) == 0))
 	do
 	{
-		//printf("%s:%d say:%s", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
+		printf("%s:%d say:%s", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
 
-		memset(resp_servidor, ' ', TAM);
+		memset(resp_servidor, '\0', TAM);
 
 		switch (verificar_msj(buffer, mi_descriptor))
 		{
@@ -249,7 +248,7 @@ void *ejec_cliente(void *ptr)
 				//loguear(ERROR_MSJ);
 				break;
 			case ERROR_CLIENTE_INC:
-				strcat(resp_servidor, "Cliente no encontrado");
+				strcat(resp_servidor, "_CL_NO_");
 				//loguear(ERROR_MSJ);
 				break;
 
@@ -278,6 +277,7 @@ void *ejec_cliente(void *ptr)
 			pthread_mutex_unlock(&mutex_cola_msj);
 			flag_pendiente = ON;
 			strcpy(buffer, COLA_GRAL.msj);
+			printf("Msj pendiente de tipo 1\n");
 			continue;
 		}
 
@@ -286,9 +286,12 @@ void *ejec_cliente(void *ptr)
 			pthread_mutex_unlock(&mutex_cola_msj);
 			flag_pendiente = ON;
 			strcpy(buffer, COLA_GRAL.msj);
+			printf("Msj pendiente de tipo 10\n");
 			continue;
 		}
 		pthread_mutex_unlock(&mutex_cola_msj);
+
+		printf("No hay msj pendientes\n");
 
 		if(flag_pendiente == ON)
 		{
@@ -300,9 +303,10 @@ void *ejec_cliente(void *ptr)
 		{
 			strcat(resp_servidor, "\r\n");
 			write(mi_descriptor, resp_servidor, TAM);
+			printf("Hizo el write de %s \n",resp_servidor);
 		}
 
-		memset(buffer, ' ', TAM);
+		memset(buffer, '\0', TAM);
 		if (read(mi_descriptor, buffer, TAM) < 0) 
 		{
 			perror("read");
@@ -412,7 +416,7 @@ int verificar_conversacion(int s_origen, int s_dest)
     if (buffer == NULL)
         return ERROR;
 
-	memset(buscar, 0, TAM);
+	memset(buscar, '\0', TAM);
 	strcat(buscar, (char*) s_origen);
 	strcat(buscar, " - ");
 	strcat(buscar, (char*) s_dest);
@@ -430,7 +434,7 @@ int mandar_msj(int origen, int destino, char* mensaje)
 {
 	char buffer[TAM];
 
-	memset(buffer, 0, TAM);
+	memset(buffer, '\0', TAM);
 	strcat(buffer, mensaje);
 
 	pthread_mutex_lock(&mutex_cola_msj);
@@ -475,7 +479,7 @@ int cliente_charlemos(int cl_orig, int cl_dest)
 	char *nombre_origen;
 	char buffer[TAM];
 
-	memset(buffer, ' ', TAM);
+	memset(buffer, '\0', TAM);
 	nombre_origen = obtener_nombre_id(cl_orig);
 	strcpy(buffer, "_CHAT: ");
 	strcat(buffer, nombre_origen);
@@ -498,7 +502,7 @@ int cliente_charlemos(int cl_orig, int cl_dest)
 	}
 
 	//salió es porque ya recibió el msj...
-	memset(buffer, 0, TAM);
+	memset(buffer, '\0', TAM);
 	strcpy(buffer, COLA_GRAL.msj);
 	pthread_mutex_unlock(&mutex_cola_msj);
 

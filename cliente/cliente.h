@@ -15,6 +15,8 @@
 
 /* Este msj indica que hay una solicitud de chat. */
 #define _CHAT_ 6
+/* Este msj indica que no existe el cliente. */
+#define ERR_CL_NO 7
 
 /* Estos son msj que se reciben y el cliente los utiliza para algún comportamiento específico */
 #define EXITO_REG 10
