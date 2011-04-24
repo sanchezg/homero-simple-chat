@@ -40,6 +40,7 @@ lista_pt **list_search_d2(lista_pt **, int);
 lista_pt **list_search_d3(lista_pt **, char*);
 void list_remove(lista_pt **);
 lista_pt *list_add(lista_pt **, pthread_t, int);
+int lista_add_nombre(int, char*);
 
 void *ejec_cliente(void *);
 int nuevo_cliente(lista_pt **, int);
@@ -53,7 +54,7 @@ int verificar_msj(char *, int);
 int archivo_agregar(char*, char*);
 char* archivo_listar(char*);
 int archivo_buscar(char *, char *);
-int registrar_usuario(char *);
+int registrar_usuario(int, char *);
 
 void broadcast_clientes(char *);
 int cliente_charlemos(int, int);

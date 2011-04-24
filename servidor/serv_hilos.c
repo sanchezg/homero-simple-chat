@@ -9,7 +9,6 @@
 #include <fcntl.h>
 #include <arpa/inet.h>
 #include <regex.h>
-//#include <iostream.h>
 #include <sys/msg.h>
 #include "serv_hilos.h"
 
@@ -121,6 +120,7 @@ void* ejec_servidor(void *ptr)
 		des_cliente=aceptar_conexion(des_servidor);
 		if (nuevo_cliente(&thread, des_cliente) < 0)
 			exit(EXIT_FAILURE);
+		list_print(thread);
 	}
 	return NULL;
 }
@@ -330,7 +330,7 @@ int verificar_msj(char * buffer_entrada, int ssock)
 	/* Primero verificar por registro */
 	if (strstr(buffer_entrada,"CTRL HOLA") != NULL)
 	{
-		if (registrar_usuario(strtok(buffer_entrada," ")) == EXITO)
+		if (registrar_usuario(ssock, strtok(buffer_entrada," ")) == EXITO)
 		{
 			//printf ("return de verificar_msj\n");
 			return EXITO_REG_CLIENTE;
@@ -357,13 +357,13 @@ int verificar_msj(char * buffer_entrada, int ssock)
 		printf("bloqueo el arc clientes\n");
 		if (archivo_buscar("clientes", msjtemp) == EXITO)
 		{
-//			printf("ya busco y dio exito\n");
+			printf("ya busco y dio exito\n");
 			pthread_mutex_unlock(&mutex_archivo_clientes);
-			dsock = obtener_id_nombre(temp);
-//			printf("dsock obtenido: %d", dsock);
+			dsock = obtener_id_nombre(msjtemp);
+			printf("dsock obtenido: %d, SSOCK: %d\n", dsock, ssock);
 			if(cliente_charlemos(ssock, dsock) == EXITO)
 			{
-//				printf("exito en cl_charl\n");
+				printf("exito en cl_charl\n");
 				return EXITO_CL_CHARL;
 			}
 			else
@@ -457,7 +457,10 @@ int obtener_id_nombre(char* nombre)
 	if ((n = list_search_d3(&thread, nombre)) == NULL)
 		return -1;
 	else
-		return ((int) &(*n)->_id_socket_);
+	{
+//		printf("dentro del obtener_id, ret: %d\n", (*n)->_id_socket_);
+		return ((*n)->_id_socket_);
+	}
 }
 
 char* obtener_nombre_id(int id)
@@ -512,7 +515,7 @@ int cliente_charlemos(int cl_orig, int cl_dest)
 	return ERROR;
 }
 
-int registrar_usuario(char *nombre)
+int registrar_usuario(int id, char *nombre)
 {
 /*	regex_t regex;
     int reti;
@@ -546,11 +549,12 @@ int registrar_usuario(char *nombre)
 		if(archivo_agregar("clientes", nombre) == EXITO)
 		{
 			pthread_mutex_unlock(&mutex_archivo_clientes);
-			//printf ("hago el unlock despues de agregar\n");
+			printf ("hago el unlock despues de agregar\n");
 			pthread_mutex_lock(&mutex_listapt);
-			// inlcuir en la lista el nombre del cliente...
+			if(lista_add_nombre(id, nombre) == ERROR)
+				return ERROR;
 			pthread_mutex_unlock(&mutex_listapt);
-			//printf ("return de reg_usuario\n");
+			printf ("return de reg_usuario\n");
 			return EXITO;
 		}
 		else
@@ -690,13 +694,33 @@ lista_pt **list_search_d2(lista_pt **n, int i)
 
 lista_pt **list_search_d3(lista_pt **n, char* nom) 
 {
+	printf("s3 ingresa\n");
     while (*n != NULL) 
 	{
-        if (strcmp((*n)->_nombre_, nom) == 0) 
+		printf("s3 avanza con %s\n", (*n)->_nombre_);
+        if (strstr((*n)->_nombre_, nom) != NULL) 
+		{
+			printf("s3 encontro a %d\n", (*n)->_id_socket_);		
 			return n;
+		}
         n = &(*n)->_next_;
     }
+	printf("s3 retorna NULL\n");
     return NULL;
+}
+
+int lista_add_nombre(int id, char* nombre)
+{
+	lista_pt *n = (lista_pt *)malloc(sizeof(lista_pt));
+
+	if ((n = *list_search_d2(&thread, id)) == NULL)
+		return ERROR;
+	n->_nombre_ = malloc(sizeof(char[16]));
+	printf("n-nomb tiene %s y nombre tiene: %s\n",n->_nombre_, nombre);
+	strcpy(n->_nombre_, nombre);
+//	n->_nombre_ = *nombre;
+	printf("agregue %s a %p\n", n->_nombre_, n);
+	return EXITO;
 }
 
 void list_print(lista_pt *n) 
@@ -705,7 +729,7 @@ void list_print(lista_pt *n)
         printf("lista esta vacía\n");
     }
     while (n != NULL) {
-        printf("print %p %p %lu\n", n, n->_next_, n->_id_thread_);
+        printf("print %p %p %lu %d\n", n, n->_next_, n->_id_thread_, n->_id_socket_);
         n = n->_next_;
     }
 }
