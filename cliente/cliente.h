@@ -9,14 +9,21 @@
 #define ON	1
 #define OFF	-1
 
+#define MENU_CODE 3
+#define EXIT_CODE 4
+
 /* Este msj significa que el enviado se recibió correctamente */
 /* El cliente no muestra msj en pantalla. */
-#define _MSJ_OK_ 5
+#define _OK_ 5
 
 /* Este msj indica que hay una solicitud de chat. */
-#define _CHAT_ 6
+#define SOLIC_CHAT 6
+
 /* Este msj indica que no existe el cliente. */
 #define ERR_CL_NO 7
+
+/* Este msj indica que el msj es de control y se tiene que hacer asi el write */
+#define CTRL_MSJ 8
 
 /* Estos son msj que se reciben y el cliente los utiliza para algún comportamiento específico */
 #define EXITO_REG 10
@@ -38,7 +45,7 @@
 #define PROMPT "~ "
 
 int abrir_conexion();
-int conectar_servidor(int, char*);
+int conectar_servidor(char*);
 int verificar_msj(char *);
 
 #endif /* __CLIENTE__ */

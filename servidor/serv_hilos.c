@@ -199,7 +199,6 @@ void *ejec_cliente(void *ptr)
 		exit(EXIT_FAILURE);
 	}
 	
-	//while ((strcmp(buffer,"exit\n") != 0) && (getpeername(mi_descriptor, (struct sockaddr*) &cli_addr, &clilen) == 0))
 	do
 	{
 		printf("%s:%d say:%s", inet_ntop (AF_INET, &s->sin_addr, ipstr, sizeof ipstr), ntohs(s->sin_port), buffer);
@@ -218,9 +217,7 @@ void *ejec_cliente(void *ptr)
 				break;
 
 			case EXITO_CL_CHARL:
-				//obtiene el nombre del chatero
 				tmp = strtok(buffer,"\"");
-				//while(tmp != NULL)
 				tmp = strtok(NULL,"\"");						
 
 				strcat(buffer_envio, (char*) mi_descriptor);
@@ -239,7 +236,6 @@ void *ejec_cliente(void *ptr)
 				break;
 			case ERROR_CL_CHARL:
 				tmp = strtok(buffer,"\"");
-				//while(tmp != NULL)
 				tmp = strtok(NULL,"\"");
 
 				strcat(resp_servidor, "CTRL NO \" ");
@@ -254,7 +250,6 @@ void *ejec_cliente(void *ptr)
 
 			case EXITO_VER_CONV:
 				tmp = strtok(buffer,"\"");
-				//while(tmp != NULL)
 				tmp = strtok(NULL,"\"");
 				strcat(buffer_envio, tmp);
 				if(mandar_msj(mi_descriptor, obtener_id_nombre(tmp), buffer_envio) == EXITO)
@@ -317,6 +312,7 @@ void *ejec_cliente(void *ptr)
 	while ((strcmp(buffer,"exit\n") != 0) && (getpeername(mi_descriptor, (struct sockaddr*) &cli_addr, &clilen) == 0));
 
 	printf("hilo %lu finalizado\n", pthread_self());
+	list_remove(list_search_d2(&thread, mi_descriptor));
 	return NULL;
 }
 
@@ -331,10 +327,7 @@ int verificar_msj(char * buffer_entrada, int ssock)
 	if (strstr(buffer_entrada,"CTRL HOLA") != NULL)
 	{
 		if (registrar_usuario(ssock, strtok(buffer_entrada," ")) == EXITO)
-		{
-			//printf ("return de verificar_msj\n");
 			return EXITO_REG_CLIENTE;
-		}
 		else
 			return ERROR_REG_CLIENTE;
 	}
@@ -342,40 +335,24 @@ int verificar_msj(char * buffer_entrada, int ssock)
 	/* Verificar por inicio chat */
 	if (strstr(buffer_entrada,"CTRL CHARLEMOS") != NULL)
 	{
-//		i=0;
 		temp = strtok(buffer_entrada,"\"");
 		temp = strtok(NULL,"\"");
 		strcpy(msjtemp, temp);
-/*		while((temp = strtok(NULL,"\"")) != NULL)
-		{
-			if(i==0)
-				strcpy(msjtemp, temp);
-			i++;
-		}
-*/
+
 		pthread_mutex_lock(&mutex_archivo_clientes);
-		printf("bloqueo el arc clientes\n");
+
 		if (archivo_buscar("clientes", msjtemp) == EXITO)
 		{
-			printf("ya busco y dio exito\n");
 			pthread_mutex_unlock(&mutex_archivo_clientes);
 			dsock = obtener_id_nombre(msjtemp);
-			printf("dsock obtenido: %d, SSOCK: %d\n", dsock, ssock);
 			if(cliente_charlemos(ssock, dsock) == EXITO)
-			{
-				printf("exito en cl_charl\n");
 				return EXITO_CL_CHARL;
-			}
 			else
-			{
-				printf("error en cl_charl\n");
 				return ERROR_CL_CHARL;
-			}
 		}
 		else
 		{
 			pthread_mutex_unlock(&mutex_archivo_clientes);
-			printf("busco y dio error, no encontro\n");
 			ERROR_MSJ = "No se encuentra el cliente\n";
 			return ERROR_CLIENTE_INC;
 		}
@@ -549,12 +526,10 @@ int registrar_usuario(int id, char *nombre)
 		if(archivo_agregar("clientes", nombre) == EXITO)
 		{
 			pthread_mutex_unlock(&mutex_archivo_clientes);
-			printf ("hago el unlock despues de agregar\n");
 			pthread_mutex_lock(&mutex_listapt);
 			if(lista_add_nombre(id, nombre) == ERROR)
 				return ERROR;
 			pthread_mutex_unlock(&mutex_listapt);
-			printf ("return de reg_usuario\n");
 			return EXITO;
 		}
 		else
@@ -694,18 +669,12 @@ lista_pt **list_search_d2(lista_pt **n, int i)
 
 lista_pt **list_search_d3(lista_pt **n, char* nom) 
 {
-	printf("s3 ingresa\n");
     while (*n != NULL) 
 	{
-		printf("s3 avanza con %s\n", (*n)->_nombre_);
         if (strstr((*n)->_nombre_, nom) != NULL) 
-		{
-			printf("s3 encontro a %d\n", (*n)->_id_socket_);		
 			return n;
-		}
         n = &(*n)->_next_;
     }
-	printf("s3 retorna NULL\n");
     return NULL;
 }
 
@@ -716,10 +685,7 @@ int lista_add_nombre(int id, char* nombre)
 	if ((n = *list_search_d2(&thread, id)) == NULL)
 		return ERROR;
 	n->_nombre_ = malloc(sizeof(char[16]));
-	printf("n-nomb tiene %s y nombre tiene: %s\n",n->_nombre_, nombre);
 	strcpy(n->_nombre_, nombre);
-//	n->_nombre_ = *nombre;
-	printf("agregue %s a %p\n", n->_nombre_, n);
 	return EXITO;
 }
 

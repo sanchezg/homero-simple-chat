@@ -11,6 +11,9 @@
 #define ON	1
 #define OFF	-1
 
+#define CTRL_CODE 2
+#define EXIT_CODE 3
+
 #define EXITO_REG_CLIENTE 10
 #define ERROR_REG_CLIENTE 11
 #define EXITO_CL_CHARL	20

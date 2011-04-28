@@ -15,7 +15,7 @@ char* MSJ_SALIDA;
 
 int main( int argc, char *argv[] ) 
 {
-	int mi_socket;//, flag_msj_serv = OFF;
+	int mi_socket, flag_stdin = OFF;
 	char buffer[TAM], sel[2];
 
 	system("clear");
@@ -42,121 +42,162 @@ int main( int argc, char *argv[] )
 	printf(PROMPT);
 
 	memset(buffer, '\0', TAM);
-	fgets(buffer, TAM, stdin);
+	fgets(buffer, TAM-1, stdin);
+	send(mi_socket, buffer, TAM-1, 0);
 
 	while (strcmp(buffer,"exit\n") != 0)
 	{
-		if (write(mi_socket, buffer, strlen(buffer)) < 0) 
-		{
-			perror("write");
-			exit(EXIT_FAILURE);
-		}
-	
-		memset(buffer, '\0', TAM );
-		if (read(mi_socket, buffer, TAM) < 0)
-		{
-			perror("read");
-			exit(EXIT_FAILURE);
-		}
+		if (flag_stdin == ON)
+			send(mi_socket, buffer, TAM-1, MSG_DONTWAIT);
+		memset(buffer, '\0', TAM-1);
+		sleep(1);
+		recv(mi_socket, buffer, TAM-1, MSG_DONTWAIT);
 
 		switch (verificar_msj(buffer))
 		{
-			case _MSJ_OK_:
+			case _OK_:
 				break;
-
 			case EXITO_REG:
 				printf("# Registro exitoso.\n");
-				memset(buffer, ' ', TAM);
+				memset(buffer, '\0', TAM);
 				break;
 			case ERROR_REG:
-				printf("# Registro rechazado. Msj servidor: %s\n", MSJ_SALIDA);
-				memset(buffer, ' ', TAM);
+				printf("# Registro rechazado. SRV: %s\n", MSJ_SALIDA);
+				memset(buffer, '\0', TAM);
 				break;
 
 			case ENTRO_ALGUIEN:
-				printf("# %s\n", buffer);
-				break;
+				printf("# %s ha entrado.\n", MSJ_SALIDA);
+  				break;
 
 			case ERR_CL_NO:
 				printf("# Cliente no registrado\n");
 				break;
 
-			case _CHAT_:
+			case SOLIC_CHAT:
 				printf("# El cliente %s quiere comunicarse, acepta? [y][n]: ", MSJ_SALIDA);
 				fgets(sel, 2, stdin);
-				if (strcmp(sel,"y\n") == 0)
+				if (sel[0] == 'y')
 				{
-					memset(buffer, ' ', TAM);
+					memset(buffer, '\0', TAM);
 					strcpy(buffer, "_OK_");
+					write(mi_socket, buffer, TAM);
 					continue;
 				}
 				else
 				{
-					memset(buffer, ' ', TAM);
+					memset(buffer, '\0', TAM);
 					strcpy(buffer, "_NO_");
+					write(mi_socket, buffer, TAM);
 					continue;
 				}
 				break;
 
 			case EXITO_CHAT:
 				printf("El cliente aceptó el chat.\n");
+				break;
 			case ERROR_CHAT:
 				printf("No disponible\n");
+				break;
+
+			case CTRL_MSJ:
+				write(mi_socket, buffer, TAM);
+				flag_stdin = ON;
+				break;
+
+			case EXIT_CODE:
+				write(mi_socket, buffer, TAM);
+				flag_stdin = ON;
+				continue;
+				break;
+			case MENU_CODE:
+				printf(MENU_MSJ);
+				flag_stdin = ON;
+				break;
 
 			default:
+				printf("%s", buffer);
 				break;
 		}
 
+		if (flag_stdin == ON)
+			flag_stdin = OFF;
+		memset(buffer, '\0', TAM-1);
 		printf(PROMPT);
-		memset(buffer, '\0', TAM);
-		fgets(buffer, TAM, stdin);
+		//fgets(buffer, TAM-1, stdin);
+		sleep(1);
+		if (recv(fileno(stdin), buffer, TAM-1, MSG_DONTWAIT) > 0)
+			flag_stdin = ON;
 	}
 
 	puts("Hasta la proxima, baby..");
-	if (write(mi_socket, buffer, strlen(buffer)) < 0) 
-	{
-		perror("write");
-		exit(EXIT_FAILURE);
-	}
-
+	send(mi_socket, buffer, TAM-1, MSG_DONTWAIT);
+	close(mi_socket);
 	exit(EXIT_SUCCESS);
 }
 
 int verificar_msj(char * buffer)
 {
-	char *temp;
+	char *temp = malloc(sizeof(char[32]));
 
-	if (strstr(buffer, "_MSJ_OK_"))
-		return _MSJ_OK_;
-
+	/* MSJ que vienen del servidor */
 	if (strstr(buffer, "CTRL QUETAL"))
 		return EXITO_REG;
 	if (strstr(buffer, "CTRL FUERA"))
 	{
+		memset(temp, '\0', 32);
 		temp = strtok(buffer,"\"");
-		//while(temp != NULL)
 		temp = strtok(NULL,"\"");
-		MSJ_SALIDA = temp;
+		strcpy(MSJ_SALIDA, temp);
 		return ERROR_REG;
 	}
 
-	if (strstr(buffer, "_CL_NO_"))
-		return ERR_CL_NO;
-
-	if (strstr(buffer, "CTRL DALE"))
-		return EXITO_CHAT;
-	if (strstr(buffer, "CTRL NO"))
-		return ERROR_CHAT;
-	
 	if (strstr(buffer, "CTRL ENTRO"))
+	{
+		memset(temp, '\0', 32);
+		temp = strtok(buffer,"\"");
+		temp = strtok(NULL,"\"");
+		strcpy(MSJ_SALIDA, temp);
 		return ENTRO_ALGUIEN;
+	}
 
 	if (strstr(buffer, "_CHAT: "))
 	{
-		MSJ_SALIDA = strtok(buffer, " \n");
-		MSJ_SALIDA = strtok(NULL, " \n");
-		return _CHAT_;
+		memset(temp, '\0', 32);
+		temp = strtok(buffer,"\"");
+		temp = strtok(NULL,"\"");
+		strcpy(MSJ_SALIDA, temp);
+		return SOLIC_CHAT;
 	}
+
+	/* MSJ del servidor que son rptas a otros */
+	if (strcmp(buffer, "CTRL DALE\n"))
+		return EXITO_CHAT;
+	if (strstr(buffer, "CTRL_NO"))
+		return ERROR_CHAT;
+	if (strstr(buffer, "_CL_NO_"))
+		return ERR_CL_NO;
+	if (strstr(buffer, "_OK_"))
+		return _OK_;
+
+	/* MSJ que vienen de stdin */
+	if(strstr(buffer, "CTRL HOLA"))
+		return CTRL_MSJ;
+
+	if(strstr(buffer, "CTRL LISTAR\n"))
+		return CTRL_MSJ;
+
+	if(strstr(buffer, "CTRL CHARLEMOS"))
+		return CTRL_MSJ;
+
+	if (strstr(buffer, "MSG"))
+		return CTRL_MSJ;
+
+	/* MSJ comandos del cliente */
+	if (strstr(buffer, "exit"))
+		return EXIT_CODE;
+	if (strstr(buffer, "menu"))
+		return MENU_CODE;
 
 	return ERROR_MSJ;
 }
