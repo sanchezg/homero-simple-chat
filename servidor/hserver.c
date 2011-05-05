@@ -10,7 +10,7 @@
 #include <arpa/inet.h>
 #include <regex.h>
 #include <sys/msg.h>
-#include "serv_hilos.h"
+#include "hserver.h"
 
 int SERVER_ACTIVO, ID_COLA;
 //char * ERROR_MSJ;
@@ -220,6 +220,20 @@ int verificar_msj(char * buffer_entrada, int ssock)
 	if (strstr(temp, "CTRL") != NULL)
 		return CTRL_CODE;
 	return 0;
+}
+
+int broadcast(int origen, char *msj)
+{
+	lista_pt *n = (lista_pt *)malloc(sizeof(lista_pt));
+	if (n == NULL)
+		return ERROR;
+	n = thread;
+    while (n != NULL) 
+	{
+        send(n->_id_socket, msj, TAM, MSG_DONTWAIT);
+        n = n->_next_;
+    }
+	return EXITO;
 }
 
 /********** Funciones que tratan con la lista de threads **********/

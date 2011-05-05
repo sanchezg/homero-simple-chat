@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "cliente.h"
+#include "hclient.h"
 
 //char* nombre;
 //char* MSJ_SALIDA;
@@ -52,6 +52,7 @@ int main( int argc, char *argv[] )
 		{
 			case EXIT_CODE:
 				CLIENTE_ACTIVO = OFF;
+				write(mi_socket, buffer, TAM);
 				continue;
 			case MENU_CODE:
 				system("clear");
