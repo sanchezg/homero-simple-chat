@@ -7,18 +7,20 @@
 #include <netdb.h> 
 #include <unistd.h>
 #include <fcntl.h>
+#include <pthread.h>
 
 #include "hclient.h"
 
 //char* nombre;
 //char* MSJ_SALIDA;
 
+int CLIENTE_ACTIVO;
 
 int main( int argc, char *argv[] ) 
 {
-	int mi_socket, fl_recv = OFF;
-	char buffer[TAM];
-	int CLIENTE_ACTIVO = ON;
+	int mi_socket;//, fl_recv = OFF;
+//	char buffer[TAM];
+//	int CLIENTE_ACTIVO = ON;
 
 	system("clear");
 
@@ -40,6 +42,25 @@ int main( int argc, char *argv[] )
 	memset(buffer, '\0', TAM);
 	fgets(buffer, TAM, stdin);
 */
+
+	pthread_t th_stdin;
+	pthread_t th_socket;
+
+	if (pthread_create(&th_stdin, NULL, exec_th_stdin, (void *) &mi_socket) != 0)
+	{
+		printf ("ERROR PTHREAD CLIENTE\n");
+		return -1;
+	}
+
+	if (pthread_create(&th_socket, NULL, exec_th_socket, (void *) &mi_socket) != 0)
+	{
+		printf ("ERROR PTHREAD CLIENTE\n");
+		return -1;
+	}
+
+	CLIENTE_ACTIVO = ON;
+
+/*
 	while(CLIENTE_ACTIVO == ON)
 	{
 		if (fl_recv == OFF)
@@ -72,10 +93,65 @@ int main( int argc, char *argv[] )
 		if (recv(mi_socket, buffer, TAM, MSG_DONTWAIT) > 0)
 			fl_recv = ON;
 	}
+*/
+	pthread_join(th_socket, NULL);
+	pthread_join(th_stdin, NULL);
 
 	puts("Hasta la proxima, baby..");
 	close(mi_socket);
 	exit(EXIT_SUCCESS);
+}
+
+void * exec_th_stdin(void *ptr)
+{
+	char buffer[TAM];
+	int *iptr = (int *) ptr;
+	int mi_socket = *iptr;
+
+	while (CLIENTE_ACTIVO == ON)
+	{
+		memset(buffer, '\0', TAM);
+		fgets(buffer, TAM, stdin);
+
+		switch(verificar_msj(buffer))
+		{
+			case EXIT_CODE:
+				CLIENTE_ACTIVO = OFF;
+				write(mi_socket, buffer, TAM);
+				continue;
+			case MENU_CODE:
+				system("clear");
+				printf(MENU_MSJ);
+				break;
+			default:
+				write(mi_socket, buffer, TAM);
+		}
+		printf(PROMPT);
+	}
+	return NULL;
+}
+
+void * exec_th_socket(void *ptr)
+{
+	char buffer[TAM];
+	int fl_recv = OFF;
+	int *iptr = (int *) ptr;
+	int mi_socket = *iptr;
+
+	while (CLIENTE_ACTIVO == ON)
+	{
+		if (recv(mi_socket, buffer, TAM, MSG_DONTWAIT) > 0)
+			fl_recv = ON;
+
+		if (fl_recv == ON)
+		{
+			printf("MSJ recibido del server: %s\n", buffer);
+			fl_recv = OFF;
+		}
+
+		sleep(1);
+	}
+	return NULL;
 }
 
 int verificar_msj(char *buf)

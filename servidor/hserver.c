@@ -13,13 +13,14 @@
 #include "hserver.h"
 
 int SERVER_ACTIVO, ID_COLA;
-//char * ERROR_MSJ;
+char * ERROR_MSJ;
 key_t K_COLA;
 //elem_cola COLA_GRAL;
 
 lista_pt *thread = NULL;
 
 pthread_mutex_t mutex_listapt = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_archivo_clientes = PTHREAD_MUTEX_INITIALIZER;
 
 int main(int argc, char *argv[]) 
 {
@@ -197,6 +198,26 @@ void *ejec_cliente(void *ptr)
 						exit(EXIT_FAILURE);
 					}
 					break;
+
+				case EXITO_REG_CLIENTE:
+					//strcat(resp_servidor, "CTRL QUETAL");
+					//broadcast_clientes("CTRL ENTRO\n");
+					if (write(mi_descriptor, "CTRL QUETAL\n", TAM) < 0) 
+					{
+						perror("write");
+						exit(EXIT_FAILURE);
+					}
+					break;
+				case ERROR_REG_CLIENTE:
+					//strcat(resp_servidor, "CTRL FUERA ");
+					//strcat(resp_servidor, ERROR_MSJ);
+					if (write(mi_descriptor, "CTRL FUERA\n", TAM) < 0) 
+					{
+						perror("write");
+						exit(EXIT_FAILURE);
+					}
+					break;
+	
 				default:
 					printf("Msj recibido: %s",buffer);
 					break;
@@ -205,11 +226,13 @@ void *ejec_cliente(void *ptr)
 		}
 
 	}
-	printf("hilo %lu finalizado\n", pthread_self());
+	printf("hilo %lu finalizado\n", pthread_self());.
+	//deregistrar_usuario(mi_descriptor);
 	list_remove(list_search_d2(&thread, mi_descriptor));
 	return NULL;
 }
 
+/* esta verifica el msj recibido en el buffer y llama a la función correspondiente */
 int verificar_msj(char * buffer_entrada, int ssock)
 {
 	char temp[TAM];
@@ -217,11 +240,52 @@ int verificar_msj(char * buffer_entrada, int ssock)
 	strcpy(temp, buffer_entrada);
 	if (strcmp(temp, "exit\n") == 0)
 		return EXIT_CODE;
-	if (strstr(temp, "CTRL") != NULL)
-		return CTRL_CODE;
+
+	if (strstr(buffer_entrada,"CTRL HOLA") != NULL)
+	{
+		if (registrar_usuario(ssock, strtok(buffer_entrada," ")) == EXITO)
+			return EXITO_REG_CLIENTE;
+		else
+			return ERROR_REG_CLIENTE;
+	}
+
 	return 0;
 }
 
+/* si el nombre como argumento es válido, registra al usuario */
+int registrar_usuario(int id, char *nombre)
+{
+	pthread_mutex_lock(&mutex_archivo_clientes);
+	if (archivo_buscar("clientes",nombre) == ERROR) //pregunto por error porque no quiero que este en el archivo...
+	{
+		if(archivo_agregar("clientes", nombre) == EXITO)
+		{
+			pthread_mutex_unlock(&mutex_archivo_clientes);
+			pthread_mutex_lock(&mutex_listapt);
+			if(lista_add_nombre(id, nombre) == ERROR)
+				return ERROR;
+			pthread_mutex_unlock(&mutex_listapt);
+			return EXITO;
+		}
+		else
+		{
+			ERROR_MSJ = "archivo_agregar()";
+			pthread_mutex_unlock(&mutex_archivo_clientes);
+			return ERROR;
+		}
+	}
+	pthread_mutex_unlock(&mutex_archivo_clientes);
+	ERROR_MSJ = "\"Error registrando usuario, el nombre ya está siendo usado\"";
+	return ERROR;
+}
+
+/* borra el registro de un usuario para que otro se pueda conectar con ese nombre */
+void deregistrar_usuario(int descriptor)
+{
+	return
+}
+
+/*envía un msj a todos los clientes */
 int broadcast(int origen, char *msj)
 {
 	lista_pt *n = (lista_pt *)malloc(sizeof(lista_pt));
@@ -230,11 +294,76 @@ int broadcast(int origen, char *msj)
 	n = thread;
     while (n != NULL) 
 	{
-        send(n->_id_socket, msj, TAM, MSG_DONTWAIT);
+        send(n->_id_socket_, msj, TAM, MSG_DONTWAIT);
         n = n->_next_;
     }
 	return EXITO;
 }
+
+/********** Funciones que tratan con archivos *********************/
+
+int archivo_buscar(char *nombre, char *cadena)
+{
+	char * buffer;
+
+	buffer = archivo_listar(nombre);
+
+	if (strstr(buffer,cadena) != NULL)
+		return EXITO;
+	else
+		return ERROR;
+}
+
+char* archivo_listar(char* nombre)
+{
+	FILE *pf;
+	char * buffer;
+	long lsize;
+	size_t result;
+
+	pf = fopen(nombre, "r");
+	if (pf==NULL) 
+	{
+		fclose(pf);
+		return NULL;		
+	}
+
+    fseek (pf, 0, SEEK_END);
+    lsize = ftell (pf);
+    rewind (pf);
+
+	buffer = (char*) malloc (sizeof(char)*lsize);
+	if (buffer == NULL)
+	{
+		fclose(pf);
+		return NULL;
+	}
+
+	result = fread (buffer,1,lsize,pf);
+	if (result != lsize)
+	{
+		fclose(pf);
+		return NULL;
+	}
+	fclose(pf);
+	return buffer;
+}
+
+int archivo_agregar(char* nombre_archivo, char* texto)
+{
+	FILE *pf;
+
+	if ((pf=fopen(nombre_archivo, "a")) == NULL) 
+	{
+		fclose(pf);
+		return ERROR;		
+	}
+
+	fputs(strcat(texto,"\n"),pf);
+	fclose(pf);
+	return EXITO;
+}
+
 
 /********** Funciones que tratan con la lista de threads **********/
 

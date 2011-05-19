@@ -48,4 +48,7 @@ int abrir_conexion();
 int conectar_servidor(char*);
 int verificar_msj(char *);
 
+void * exec_th_stdin(void*);
+void * exec_th_socket(void*);
+
 #endif /* __HCLIENT__ */
