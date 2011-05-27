@@ -3,6 +3,7 @@
 
 #define MAX_QUE 5
 #define TAM 256
+#define TAMNOM 32
 #define PUERTO 6666
 
 #define EXITO 0
@@ -59,6 +60,7 @@ int verificar_msj(char *, int);
 int archivo_agregar(char*, char*);
 char* archivo_listar(char*);
 int archivo_buscar(char *, char *);
+int archivo_borrar(char*, char*);
 int registrar_usuario(int, char *);
 
 void broadcast_clientes(char *);

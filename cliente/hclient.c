@@ -134,19 +134,19 @@ void * exec_th_stdin(void *ptr)
 void * exec_th_socket(void *ptr)
 {
 	char buffer[TAM];
-	int fl_recv = OFF;
+//	int fl_recv = OFF;
 	int *iptr = (int *) ptr;
 	int mi_socket = *iptr;
 
 	while (CLIENTE_ACTIVO == ON)
 	{
 		if (recv(mi_socket, buffer, TAM, MSG_DONTWAIT) > 0)
-			fl_recv = ON;
+//			fl_recv = ON;
 
-		if (fl_recv == ON)
+//		if (fl_recv == ON)
 		{
 			printf("MSJ recibido del server: %s\n", buffer);
-			fl_recv = OFF;
+//			fl_recv = OFF;
 		}
 
 		usleep(100);

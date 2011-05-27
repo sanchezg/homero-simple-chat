@@ -323,6 +323,30 @@ char * listar_clientes(int socket)
 	return lista;
 }
 
+/* Obtienen el sock_id o nombre de un cliente de la lista */
+int obtener_id_nombre(char* nombre)
+{
+	lista_pt **n = malloc(sizeof(lista_pt*));
+
+	if ((n = list_search_d3(&thread, nombre)) == NULL)
+		return -1;
+	else
+	{
+//		printf("dentro del obtener_id, ret: %d\n", (*n)->_id_socket_);
+		return ((*n)->_id_socket_);
+	}
+}
+
+char* obtener_nombre_id(int id)
+{
+	lista_pt **n = malloc(sizeof(lista_pt));
+
+	if ((n = list_search_d2(&thread, id)) == NULL)
+		return NULL;
+	else
+		return ((char*) &(*n)->_nombre_);
+}
+
 /********** Funciones que tratan con archivos *********************/
 
 int archivo_buscar(char *nombre, char *cadena)
@@ -389,7 +413,7 @@ int archivo_agregar(char* nombre_archivo, char* texto)
 
 int archivo_borrar(char* nombre_archivo, char* texto)
 {
-	char *temp1, *temp2, *str, *lista_nombres;
+	char *temp1, *str, *lista_nombres;
 	FILE *pf;
 	if ((pf=fopen(nombre_archivo, "w+r")) == NULL)
 	{
@@ -401,7 +425,7 @@ int archivo_borrar(char* nombre_archivo, char* texto)
 	strcpy(lista_nombres, archivo_listar(nombre_archivo));
 
 	temp1 = malloc(sizeof(char)*TAMNOM*TAMNOM);
-	temp2 = malloc(sizeof(char)*TAMNOM*TAMNOM);
+	str = malloc(sizeof(char)*TAMNOM);
 
 	//primero ir hasta que encuentre el nombre...
 	while (strcmp(texto, fgets(str, TAMNOM, pf)) != 0)
