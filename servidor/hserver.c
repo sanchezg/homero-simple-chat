@@ -296,6 +296,7 @@ int registrar_usuario(int id, char *nombre)
 /* borra el registro de un usuario para que otro se pueda conectar con ese nombre */
 void deregistrar_usuario(int descriptor)
 {
+	archivo_borrar("clientes", obtener_nombre_id(descriptor));
 	return;
 }
 
@@ -408,9 +409,23 @@ int archivo_borrar(char* nombre_archivo, char* texto)
 
 	//ahora ir hasta el final...
 	while (fgets(str, TAMNOM, pf) != NULL)
-		strcpy(temp1, str);
+		strcpy(temp1, str);		//en temp1 me quedan todos los nombres
 
-	
+	fclose(pf);		//Primero, borrar el archivo...
+	if(remove(nombre_archivo) != 0 )
+	{
+		perror("remove");
+		return ERROR;
+	}
+	//... abrirlo para escritura
+	if ((pf=fopen(nombre_archivo, "w+r")) == NULL)
+	{
+		fclose(pf);
+		return ERROR;
+	}
+
+	fputs(temp1, pf);	//y ponerle todo de nuevo!
+	return EXITO;
 }
 
 
