@@ -153,12 +153,12 @@ int nuevo_cliente(lista_pt **n, int dsc)
 
 void *ejec_cliente(void *ptr)
 {
-	int *iptr, mi_descriptor, fl_recv = OFF;
+	int *iptr, mi_descriptor;//, fl_recv = OFF;
 	int CLIENTE_ACTIVO = ON;
 	size_t clilen;
 	struct sockaddr_in cli_addr;
 	struct sockaddr_in* s;
-	char ipstr[INET_ADDRSTRLEN], buffer[TAM];
+	char ipstr[INET_ADDRSTRLEN], buffer[TAM], resp_servidor[TAM];
 
 	iptr = (int *) ptr;
 	mi_descriptor = *iptr;
@@ -176,14 +176,14 @@ void *ejec_cliente(void *ptr)
 		//Esperar por el primer msj.
 		memset(buffer, '\0', TAM);
 		if (recv(mi_descriptor, buffer, TAM, MSG_DONTWAIT) > 0)
-			fl_recv = ON;
+//			fl_recv = ON;
 		/*if (read(mi_descriptor, buffer, TAM) < 0) 
 		{
 			perror("read");
 			exit(EXIT_FAILURE);
 		}*/
 
-		if (fl_recv == ON)
+//		if (fl_recv == ON)
 		{
 			switch (verificar_msj(buffer, mi_descriptor))
 			{
@@ -208,10 +208,21 @@ void *ejec_cliente(void *ptr)
 						exit(EXIT_FAILURE);
 					}
 					break;
+
 				case ERROR_REG_CLIENTE:
 					//strcat(resp_servidor, "CTRL FUERA ");
 					//strcat(resp_servidor, ERROR_MSJ);
 					if (write(mi_descriptor, "CTRL FUERA\n", TAM) < 0) 
+					{
+						perror("write");
+						exit(EXIT_FAILURE);
+					}
+					break;
+
+				case LISTAR_CODE:
+					strcpy(resp_servidor, "# Lista de usuarios: \n");
+					strcat(resp_servidor, listar_clientes(mi_descriptor));
+					if (write(mi_descriptor, resp_servidor, TAM) < 0) 
 					{
 						perror("write");
 						exit(EXIT_FAILURE);
@@ -222,11 +233,11 @@ void *ejec_cliente(void *ptr)
 					printf("Msj recibido: %s",buffer);
 					break;
 			}
-			fl_recv = OFF;
+			//fl_recv = OFF;
 		}
 
 	}
-	printf("hilo %lu finalizado\n", pthread_self());.
+	printf("hilo %lu finalizado\n", pthread_self());
 	//deregistrar_usuario(mi_descriptor);
 	list_remove(list_search_d2(&thread, mi_descriptor));
 	return NULL;
@@ -240,6 +251,9 @@ int verificar_msj(char * buffer_entrada, int ssock)
 	strcpy(temp, buffer_entrada);
 	if (strcmp(temp, "exit\n") == 0)
 		return EXIT_CODE;
+
+	if (strcmp(temp, "CTRL LISTAR\n") == 0)
+		return LISTAR_CODE;
 
 	if (strstr(buffer_entrada,"CTRL HOLA") != NULL)
 	{
@@ -282,7 +296,7 @@ int registrar_usuario(int id, char *nombre)
 /* borra el registro de un usuario para que otro se pueda conectar con ese nombre */
 void deregistrar_usuario(int descriptor)
 {
-	return
+	return;
 }
 
 /*envía un msj a todos los clientes */
@@ -298,6 +312,14 @@ int broadcast(int origen, char *msj)
         n = n->_next_;
     }
 	return EXITO;
+}
+
+/* Devuelve una lista de clientes registrados, excluyendo al que llama la funcion */
+char * listar_clientes(int socket)
+{
+	char* lista = (char*) malloc (sizeof(char)*TAM);
+	strcpy(lista, archivo_listar("clientes"));
+	return lista;
 }
 
 /********** Funciones que tratan con archivos *********************/
@@ -362,6 +384,33 @@ int archivo_agregar(char* nombre_archivo, char* texto)
 	fputs(strcat(texto,"\n"),pf);
 	fclose(pf);
 	return EXITO;
+}
+
+int archivo_borrar(char* nombre_archivo, char* texto)
+{
+	char *temp1, *temp2, *str, *lista_nombres;
+	FILE *pf;
+	if ((pf=fopen(nombre_archivo, "w+r")) == NULL)
+	{
+		fclose(pf);
+		return ERROR;
+	}
+
+	lista_nombres = malloc(sizeof(char)*TAMNOM*TAMNOM);
+	strcpy(lista_nombres, archivo_listar(nombre_archivo));
+
+	temp1 = malloc(sizeof(char)*TAMNOM*TAMNOM);
+	temp2 = malloc(sizeof(char)*TAMNOM*TAMNOM);
+
+	//primero ir hasta que encuentre el nombre...
+	while (strcmp(texto, fgets(str, TAMNOM, pf)) != 0)
+		strcpy(temp1, str);
+
+	//ahora ir hasta el final...
+	while (fgets(str, TAMNOM, pf) != NULL)
+		strcpy(temp1, str);
+
+	
 }
 
 

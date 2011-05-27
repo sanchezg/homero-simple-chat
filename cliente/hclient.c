@@ -149,7 +149,7 @@ void * exec_th_socket(void *ptr)
 			fl_recv = OFF;
 		}
 
-		sleep(1);
+		usleep(100);
 	}
 	return NULL;
 }

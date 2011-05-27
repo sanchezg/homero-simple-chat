@@ -14,6 +14,8 @@
 #define CTRL_CODE 2
 #define EXIT_CODE 3
 
+#define LISTAR_CODE 4
+
 #define EXITO_REG_CLIENTE 10
 #define ERROR_REG_CLIENTE 11
 #define EXITO_CL_CHARL	20
@@ -60,9 +62,7 @@ int archivo_buscar(char *, char *);
 int registrar_usuario(int, char *);
 
 void broadcast_clientes(char *);
-int cliente_charlemos(int, int);
-int mandar_msj(int, int, char*);
-int verificar_conversacion(int, int);
+char * listar_clientes(int);
 
 int obtener_id_nombre(char*);
 char* obtener_nombre_id(int);
