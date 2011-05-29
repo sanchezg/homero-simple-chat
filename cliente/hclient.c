@@ -11,16 +11,12 @@
 
 #include "hclient.h"
 
-//char* nombre;
-//char* MSJ_SALIDA;
-
 int CLIENTE_ACTIVO;
 
 int main( int argc, char *argv[] ) 
 {
-	int mi_socket;//, fl_recv = OFF;
-//	char buffer[TAM];
-//	int CLIENTE_ACTIVO = ON;
+	int mi_socket;
+	pthread_t th_stdin, th_socket;
 
 	system("clear");
 
@@ -38,13 +34,7 @@ int main( int argc, char *argv[] )
 
 	printf(MENU_MSJ);
 	printf(PROMPT);
-/*
-	memset(buffer, '\0', TAM);
-	fgets(buffer, TAM, stdin);
-*/
 
-	pthread_t th_stdin;
-	pthread_t th_socket;
 
 	if (pthread_create(&th_stdin, NULL, exec_th_stdin, (void *) &mi_socket) != 0)
 	{
@@ -60,40 +50,6 @@ int main( int argc, char *argv[] )
 
 	CLIENTE_ACTIVO = ON;
 
-/*
-	while(CLIENTE_ACTIVO == ON)
-	{
-		if (fl_recv == OFF)
-		{
-			memset(buffer, '\0', TAM);
-			fgets(buffer, TAM, stdin);
-		}
-
-		switch(verificar_msj(buffer))
-		{
-			case EXIT_CODE:
-				CLIENTE_ACTIVO = OFF;
-				write(mi_socket, buffer, TAM);
-				continue;
-			case MENU_CODE:
-				system("clear");
-				printf(MENU_MSJ);
-				break;
-			default:
-				if (fl_recv == ON)
-				{
-					printf("MSJ recibido del server: %s", buffer);
-					fl_recv = OFF;
-				}
-				else
-					write(mi_socket, buffer, TAM);
-				break;
-		}
-		printf(PROMPT);
-		if (recv(mi_socket, buffer, TAM, MSG_DONTWAIT) > 0)
-			fl_recv = ON;
-	}
-*/
 	pthread_join(th_socket, NULL);
 	pthread_join(th_stdin, NULL);
 
@@ -134,19 +90,14 @@ void * exec_th_stdin(void *ptr)
 void * exec_th_socket(void *ptr)
 {
 	char buffer[TAM];
-//	int fl_recv = OFF;
 	int *iptr = (int *) ptr;
 	int mi_socket = *iptr;
 
 	while (CLIENTE_ACTIVO == ON)
 	{
 		if (recv(mi_socket, buffer, TAM, MSG_DONTWAIT) > 0)
-//			fl_recv = ON;
-
-//		if (fl_recv == ON)
 		{
 			printf("MSJ recibido del server: %s\n", buffer);
-//			fl_recv = OFF;
 		}
 
 		usleep(100);

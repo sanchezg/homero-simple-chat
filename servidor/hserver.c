@@ -176,32 +176,14 @@ void *ejec_cliente(void *ptr)
 		//Esperar por el primer msj.
 		memset(buffer, '\0', TAM);
 		if (recv(mi_descriptor, buffer, TAM, MSG_DONTWAIT) > 0)
-//			fl_recv = ON;
-		/*if (read(mi_descriptor, buffer, TAM) < 0) 
-		{
-			perror("read");
-			exit(EXIT_FAILURE);
-		}*/
-
-//		if (fl_recv == ON)
 		{
 			switch (verificar_msj(buffer, mi_descriptor))
 			{
 				case EXIT_CODE:
 					CLIENTE_ACTIVO = OFF;
 					continue;
-				case CTRL_CODE:
-					printf("MSJ de CONTROL recibido: %s", buffer);
-					if (write(mi_descriptor, "__OK__\n", TAM) < 0) 
-					{
-						perror("write");
-						exit(EXIT_FAILURE);
-					}
-					break;
 
 				case EXITO_REG_CLIENTE:
-					//strcat(resp_servidor, "CTRL QUETAL");
-					//broadcast_clientes("CTRL ENTRO\n");
 					if (write(mi_descriptor, "CTRL QUETAL\n", TAM) < 0) 
 					{
 						perror("write");
@@ -210,8 +192,6 @@ void *ejec_cliente(void *ptr)
 					break;
 
 				case ERROR_REG_CLIENTE:
-					//strcat(resp_servidor, "CTRL FUERA ");
-					//strcat(resp_servidor, ERROR_MSJ);
 					if (write(mi_descriptor, "CTRL FUERA\n", TAM) < 0) 
 					{
 						perror("write");
@@ -233,7 +213,6 @@ void *ejec_cliente(void *ptr)
 					printf("Msj recibido: %s",buffer);
 					break;
 			}
-			//fl_recv = OFF;
 		}
 
 	}
@@ -247,8 +226,8 @@ void *ejec_cliente(void *ptr)
 int verificar_msj(char * buffer_entrada, int ssock)
 {
 	char temp[TAM];
-
 	strcpy(temp, buffer_entrada);
+
 	if (strcmp(temp, "exit\n") == 0)
 		return EXIT_CODE;
 
@@ -257,7 +236,7 @@ int verificar_msj(char * buffer_entrada, int ssock)
 
 	if (strstr(buffer_entrada,"CTRL HOLA") != NULL)
 	{
-		if (registrar_usuario(ssock, strtok(buffer_entrada," ")) == EXITO)
+		if (registrar_usuario(ssock, strtok(temp," ")) == EXITO)
 			return EXITO_REG_CLIENTE;
 		else
 			return ERROR_REG_CLIENTE;
@@ -296,7 +275,9 @@ int registrar_usuario(int id, char *nombre)
 /* borra el registro de un usuario para que otro se pueda conectar con ese nombre */
 void deregistrar_usuario(int descriptor)
 {
+	pthread_mutex_lock(&mutex_archivo_clientes);
 	archivo_borrar("clientes", obtener_nombre_id(descriptor));
+	pthread_mutex_unlock(&mutex_archivo_clientes);
 	return;
 }
 
@@ -315,11 +296,22 @@ int broadcast(int origen, char *msj)
 	return EXITO;
 }
 
-/* Devuelve una lista de clientes registrados, excluyendo al que llama la funcion */
+/* Devuelve una lista de clientes registrados */
 char * listar_clientes(int socket)
 {
 	char* lista = (char*) malloc (sizeof(char)*TAM);
-	strcpy(lista, archivo_listar("clientes"));
+
+	lista_pt *n = malloc(sizeof(lista_pt));
+	pthread_mutex_lock(&mutex_listapt);
+	n = thread;
+	pthread_mutex_unlock(&mutex_listapt);
+
+    while (n != NULL) {
+        strcat(lista, n->_nombre_);
+        n = n->_next_;
+    }
+	free(n);
+
 	return lista;
 }
 
@@ -372,7 +364,7 @@ char* archivo_listar(char* nombre)
 	if (pf==NULL) 
 	{
 		fclose(pf);
-		return NULL;		
+		return NULL;
 	}
 
     fseek (pf, 0, SEEK_END);
@@ -439,6 +431,7 @@ int archivo_borrar(char* nombre_archivo, char* texto)
 	if(remove(nombre_archivo) != 0 )
 	{
 		perror("remove");
+		fclose(pf);
 		return ERROR;
 	}
 	//... abrirlo para escritura
@@ -449,6 +442,7 @@ int archivo_borrar(char* nombre_archivo, char* texto)
 	}
 
 	fputs(temp1, pf);	//y ponerle todo de nuevo!
+	fclose(pf);
 	return EXITO;
 }
 

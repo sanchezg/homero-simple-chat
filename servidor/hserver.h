@@ -12,7 +12,6 @@
 #define ON	1
 #define OFF	-1
 
-#define CTRL_CODE 2
 #define EXIT_CODE 3
 
 #define LISTAR_CODE 4
