@@ -21,6 +21,7 @@ lista_pt *thread = NULL;
 
 pthread_mutex_t mutex_listapt = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_archivo_clientes = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_cola_msj = PTHREAD_MUTEX_INITIALIZER;
 
 int main(int argc, char *argv[]) 
 {
@@ -208,6 +209,15 @@ void *ejec_cliente(void *ptr)
 						exit(EXIT_FAILURE);
 					}
 					break;
+
+				case EXITO_CL_CHARL:
+					puts("pregunta de chat enviada\n");
+					break;
+
+				case ERROR_CL_CHARL:
+					puts("error de chat\n");
+					send(mi_descriptor, ERROR_MSJ, TAM, MSG_DONTWAIT);
+					break;
 	
 				default:
 					printf("Msj recibido: %s",buffer);
@@ -223,7 +233,7 @@ void *ejec_cliente(void *ptr)
 }
 
 /* esta verifica el msj recibido en el buffer y llama a la función correspondiente */
-int verificar_msj(char * buffer_entrada, int ssock)
+int verificar_msj(char * buffer_entrada, int sock_id)
 {
 	char temp[TAM];
 	strcpy(temp, buffer_entrada);
@@ -236,12 +246,36 @@ int verificar_msj(char * buffer_entrada, int ssock)
 
 	if (strstr(buffer_entrada,"CTRL HOLA") != NULL)
 	{
-		if (registrar_usuario(ssock, strtok(temp," ")) == EXITO)
+		if (registrar_usuario(sock_id, strtok(temp," ")) == EXITO)
 			return EXITO_REG_CLIENTE;
 		else
 			return ERROR_REG_CLIENTE;
 	}
 
+	if (strstr(temp, "CTRL CHARLEMOS") != NULL)
+	{
+		strtok(temp, "\"");
+		strcpy(temp, strtok(NULL, "\""));
+		printf("nombre a buscar: %s\n", temp);
+		pthread_mutex_lock(&mutex_archivo_clientes);
+		if (archivo_buscar("clientes", temp) == EXITO)
+		{
+			pthread_mutex_unlock(&mutex_archivo_clientes);
+			if (preguntar_chat(sock_id, temp) == EXITO)
+				return EXITO_CL_CHARL;
+			else
+			{
+				strcpy(ERROR_MSJ, "Error desconocido\n");
+				return ERROR_CL_CHARL;
+			}
+		}
+		else
+		{
+			pthread_mutex_unlock(&mutex_archivo_clientes);
+			ERROR_MSJ = "No se encontro al cliente\n";
+			return ERROR_CL_CHARL;
+		}
+	}
 	return 0;
 }
 
@@ -272,6 +306,37 @@ int registrar_usuario(int id, char *nombre)
 	return ERROR;
 }
 
+/* manda msj a usuario solicitando chat */
+int preguntar_chat(int socket_origen, char* nombre_destino)
+{
+	int socket_destino;
+	char* nombre_origen;
+	elem_cola buffer_cola;
+
+	pthread_mutex_lock(&mutex_listapt);
+	socket_destino = obtener_id_nombre(nombre_destino);
+	nombre_origen = obtener_nombre_id(socket_origen);
+	nombre_origen = strtok(nombre_origen, "\n");
+	pthread_mutex_unlock(&mutex_listapt);
+
+	printf("desde %d %s hacia %d %s\n", socket_origen, nombre_origen, socket_destino, nombre_destino);
+
+	buffer_cola.tipo = socket_destino;
+	strcpy(buffer_cola.msj, "_CHAT|");
+	strcat(buffer_cola.msj, nombre_origen);
+	strcat(buffer_cola.msj, "\n");
+
+	pthread_mutex_lock(&mutex_cola_msj);
+	if(msgsnd(ID_COLA, (struct msgbuf *) &buffer_cola, sizeof(buffer_cola.msj), IPC_NOWAIT) != 0)
+	{
+		pthread_mutex_unlock(&mutex_cola_msj);
+		return ERROR;
+	}
+	pthread_mutex_unlock(&mutex_cola_msj);
+
+	return EXITO;
+}
+
 /* borra el registro de un usuario para que otro se pueda conectar con ese nombre */
 void deregistrar_usuario(int descriptor)
 {
@@ -288,7 +353,7 @@ int broadcast(int origen, char *msj)
 	if (n == NULL)
 		return ERROR;
 	n = thread;
-    while (n != NULL) 
+    while (n != NULL)
 	{
         send(n->_id_socket_, msj, TAM, MSG_DONTWAIT);
         n = n->_next_;
@@ -323,10 +388,7 @@ int obtener_id_nombre(char* nombre)
 	if ((n = list_search_d3(&thread, nombre)) == NULL)
 		return -1;
 	else
-	{
-//		printf("dentro del obtener_id, ret: %d\n", (*n)->_id_socket_);
 		return ((*n)->_id_socket_);
-	}
 }
 
 char* obtener_nombre_id(int id)
@@ -336,7 +398,7 @@ char* obtener_nombre_id(int id)
 	if ((n = list_search_d2(&thread, id)) == NULL)
 		return NULL;
 	else
-		return ((char*) &(*n)->_nombre_);
+		return ((*n)->_nombre_);
 }
 
 /********** Funciones que tratan con archivos *********************/
