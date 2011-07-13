@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <pthread.h>
 #include <string.h>
 #include <sys/types.h> 
@@ -23,12 +24,30 @@ pthread_mutex_t mutex_listapt = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_archivo_clientes = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_msj = PTHREAD_MUTEX_INITIALIZER;
 
+void sigint_handler(int sig)
+{
+	/* Primero vaciar y liberar la cola de msj */
+	msgctl(ID_COLA, IPC_RMID, NULL);
+
+	/* Eliminar archivos */
+	//remove("clientes");
+
+	printf("Hasta la próxima... :)\n");
+	exit(EXIT_SUCCESS);
+}
+
 int main(int argc, char *argv[]) 
 {
 	int des_servidor;
 	pthread_t th_conex;
 
-	system("clear"); 
+	system("clear");
+
+	if (signal(SIGINT, sigint_handler) == SIG_ERR)
+	{
+		printf("Error en sigint_handler\n");
+		exit(EXIT_FAILURE);
+	}
 
 	if ((des_servidor = iniciar_servidor(PUERTO)) == -1)
 		exit(EXIT_FAILURE);
@@ -160,6 +179,7 @@ void *ejec_cliente(void *ptr)
 	struct sockaddr_in cli_addr;
 	struct sockaddr_in* s;
 	char ipstr[INET_ADDRSTRLEN], buffer[TAM], resp_servidor[TAM];
+	elem_cola buffer_cola;
 
 	iptr = (int *) ptr;
 	mi_descriptor = *iptr;
@@ -218,12 +238,39 @@ void *ejec_cliente(void *ptr)
 					puts("error de chat\n");
 					send(mi_descriptor, ERROR_MSJ, TAM, MSG_DONTWAIT);
 					break;
-	
+
+				case EXITO_CHAT:
+					puts("Chat aceptado\n");
+					break;
+				case ERROR_CHAT:
+					puts("Chat rechazado\n");
+					break;
+
 				default:
 					printf("Msj recibido: %s",buffer);
 					break;
 			}
 		}
+		/* acá debería revisar si hay msj pendientes en la cola */
+		/* Mensajes que preguntan chat */
+		pthread_mutex_lock(&mutex_cola_msj);
+		if(msgrcv(ID_COLA, (struct msgbuf *) &buffer_cola, sizeof(buffer_cola.msj), mi_descriptor, IPC_NOWAIT) > 0)
+		{
+			pthread_mutex_unlock(&mutex_cola_msj);
+			//printf("Hay un msj para mí: %s \n", buffer_cola.msj);
+			send(mi_descriptor, buffer_cola.msj, TAM, MSG_DONTWAIT);
+		}
+		pthread_mutex_unlock(&mutex_cola_msj);
+
+		/* Mensajes de chat, notar el tipo varía!! */
+		pthread_mutex_lock(&mutex_cola_msj);
+		if(msgrcv(ID_COLA, (struct msgbuf *) &buffer_cola, sizeof(buffer_cola.msj), mi_descriptor*100, IPC_NOWAIT) > 0)
+		{
+			pthread_mutex_unlock(&mutex_cola_msj);
+			//printf("Hay un msj para mí: %s \n", buffer_cola.msj);
+			send(mi_descriptor, buffer_cola.msj, TAM, MSG_DONTWAIT);
+		}
+		pthread_mutex_unlock(&mutex_cola_msj);
 
 	}
 	printf("hilo %lu finalizado\n", pthread_self());
@@ -276,6 +323,12 @@ int verificar_msj(char * buffer_entrada, int sock_id)
 			return ERROR_CL_CHARL;
 		}
 	}
+
+	if (strstr(temp, "CHAT_OK") != NULL)
+		return EXITO_CHAT;
+
+	if (strstr(temp, "CHAT_NO") != NULL)
+		return ERROR_CHAT;
 	return 0;
 }
 

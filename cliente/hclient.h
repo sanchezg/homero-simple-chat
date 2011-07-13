@@ -17,7 +17,7 @@
 #define _OK_ 5
 
 /* Este msj indica que hay una solicitud de chat. */
-#define SOLIC_CHAT 6
+#define CHAT_CODE 6
 
 /* Este msj indica que no existe el cliente. */
 #define ERR_CL_NO 7

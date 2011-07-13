@@ -12,6 +12,7 @@
 #include "hclient.h"
 
 int CLIENTE_ACTIVO;
+char* MSJ_RET;
 
 int main( int argc, char *argv[] ) 
 {
@@ -79,8 +80,15 @@ void * exec_th_stdin(void *ptr)
 				system("clear");
 				printf(MENU_MSJ);
 				break;
+			case EXITO_CHAT:
+				write(mi_socket, "CHAT_OK\n", TAM);
+				break;
+			case ERROR_CHAT:
+				write(mi_socket, "CHAT_NO\n", TAM);
+				break;
 			default:
 				write(mi_socket, buffer, TAM);
+				break;
 		}
 		printf(PROMPT);
 	}
@@ -97,7 +105,14 @@ void * exec_th_socket(void *ptr)
 	{
 		if (recv(mi_socket, buffer, TAM, MSG_DONTWAIT) > 0)
 		{
-			printf("MSJ recibido del server: %s\n", buffer);
+			switch(verificar_msj(buffer))
+			{
+				case CHAT_CODE:
+					break;
+				default:
+					printf("MSJ recibido del server: %s ", buffer);
+					break;
+			}
 		}
 
 		usleep(100);
@@ -114,6 +129,23 @@ int verificar_msj(char *buf)
 		return EXIT_CODE;
 	if (strcmp(temp, "menu\n") == 0)
 		return MENU_CODE;
+
+	if (strcmp(temp, "SI\n") == 0)
+	{	
+		return EXITO_CHAT;
+	}
+	if (strcmp(temp, "NO\n") == 0)
+		return ERROR_CHAT;
+
+	if (strstr(temp, "_CHAT|") != NULL)
+	{
+		//memset(MSJ_RET, '\0', TAM);
+		strtok(temp, "|");
+		strcpy(temp, strtok(NULL, "\n"));
+		printf("El usuario %s quiere iniciar chat, acepta? [SI|NO]\n", temp);
+		return CHAT_CODE;
+	}
+
 	return 0;
 }
 
