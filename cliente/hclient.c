@@ -12,7 +12,8 @@
 #include "hclient.h"
 
 int CLIENTE_ACTIVO;
-char* MSJ_RET;
+char* MSJ_RETORNO;
+char* NICKNAME;
 
 int main( int argc, char *argv[] ) 
 {
@@ -65,6 +66,9 @@ void * exec_th_stdin(void *ptr)
 	int *iptr = (int *) ptr;
 	int mi_socket = *iptr;
 
+	MSJ_RETORNO = malloc(sizeof(char)*TAM);
+	NICKNAME = malloc(sizeof(char)*32);
+
 	while (CLIENTE_ACTIVO == ON)
 	{
 		memset(buffer, '\0', TAM);
@@ -81,7 +85,7 @@ void * exec_th_stdin(void *ptr)
 				printf(MENU_MSJ);
 				break;
 			case EXITO_CHAT:
-				write(mi_socket, "CHAT_OK\n", TAM);
+				write(mi_socket, MSJ_RETORNO, TAM);
 				break;
 			case ERROR_CHAT:
 				write(mi_socket, "CHAT_NO\n", TAM);
@@ -130,8 +134,23 @@ int verificar_msj(char *buf)
 	if (strcmp(temp, "menu\n") == 0)
 		return MENU_CODE;
 
+	if (strstr(temp, "CTRL HOLA") != NULL)
+	{
+		memset(NICKNAME, '\0', 32);
+		strcpy(NICKNAME, strtok(temp, " "));
+		return 0;
+	}
+
+	/* Se devuelve al servidor el msj: <DESTINO>|CHAT_OK|<ORIGEN>*/
 	if (strcmp(temp, "SI\n") == 0)
-	{	
+	{
+		memset(temp, '\0', TAM);
+		strcpy(temp, MSJ_RETORNO);
+		strcat(temp, "|CHAT_OK|");
+		strcat(temp, NICKNAME);
+		strcat(temp, "\n");
+		memset(MSJ_RETORNO, '\0', TAM);
+		strcpy(MSJ_RETORNO, temp);
 		return EXITO_CHAT;
 	}
 	if (strcmp(temp, "NO\n") == 0)
@@ -139,9 +158,10 @@ int verificar_msj(char *buf)
 
 	if (strstr(temp, "_CHAT|") != NULL)
 	{
-		//memset(MSJ_RET, '\0', TAM);
+		memset(MSJ_RETORNO, '\0', TAM);
 		strtok(temp, "|");
 		strcpy(temp, strtok(NULL, "\n"));
+		strcpy(MSJ_RETORNO, temp);
 		printf("El usuario %s quiere iniciar chat, acepta? [SI|NO]\n", temp);
 		return CHAT_CODE;
 	}

@@ -26,7 +26,7 @@ pthread_mutex_t mutex_cola_msj = PTHREAD_MUTEX_INITIALIZER;
 
 void sigint_handler(int sig)
 {
-	/* Primero vaciar y liberar la cola de msj */
+	/* Primero liberar la cola de msj */
 	msgctl(ID_COLA, IPC_RMID, NULL);
 
 	/* Eliminar archivos */
@@ -325,7 +325,14 @@ int verificar_msj(char * buffer_entrada, int sock_id)
 	}
 
 	if (strstr(temp, "CHAT_OK") != NULL)
+	{
+		char temp1[32], temp2[32];
+		strcpy(temp1, strtok(temp, "|")); //solicitante
+		strtok(NULL, "|");
+		strcpy(temp2, strtok(NULL, "\n"); //solicitado
+		
 		return EXITO_CHAT;
+	}
 
 	if (strstr(temp, "CHAT_NO") != NULL)
 		return ERROR_CHAT;

@@ -16,7 +16,7 @@
 /* El cliente no muestra msj en pantalla. */
 #define _OK_ 5
 
-/* Este msj indica que hay una solicitud de chat. */
+/* Msj desde el socket, indica que hay una solicitud de chat. */
 #define CHAT_CODE 6
 
 /* Este msj indica que no existe el cliente. */
@@ -29,6 +29,7 @@
 #define EXITO_REG 10
 #define ERROR_REG 11
 #define ENTRO_ALGUIEN 20
+/* Con estos msj responde el receptor que acepta o rechaza la conversacion. */
 #define EXITO_CHAT 30
 #define ERROR_CHAT 31
 
