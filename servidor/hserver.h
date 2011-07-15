@@ -58,6 +58,8 @@ int list_len(lista_pt *);
 void* ejec_servidor(void *);
 int verificar_msj(char *, int);
 int preguntar_chat(int, char*);
+int responder_chat(char*, char*, char*);
+int broadcast(int, char*);
 
 int archivo_agregar(char*, char*);
 char* archivo_listar(char*);

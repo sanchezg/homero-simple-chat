@@ -210,6 +210,11 @@ void *ejec_cliente(void *ptr)
 						perror("write");
 						exit(EXIT_FAILURE);
 					}
+					/*memset(resp_servidor, '\0', TAM);
+					strcpy(resp_servidor, "CTRL ENTRO \"");
+					strcpy(resp_servidor, ERROR_MSJ);
+					strcpy(resp_servidor, "\"\n");
+					broadcast(mi_descriptor, resp_servidor);*/
 					break;
 
 				case ERROR_REG_CLIENTE:
@@ -221,6 +226,7 @@ void *ejec_cliente(void *ptr)
 					break;
 
 				case LISTAR_CODE:
+					memset(resp_servidor, '\0', TAM);
 					strcpy(resp_servidor, "# Lista de usuarios: \n");
 					strcat(resp_servidor, listar_clientes(mi_descriptor));
 					if (write(mi_descriptor, resp_servidor, TAM) < 0) 
@@ -240,10 +246,10 @@ void *ejec_cliente(void *ptr)
 					break;
 
 				case EXITO_CHAT:
-					puts("Chat aceptado\n");
+					//puts("Chat aceptado\n");
 					break;
 				case ERROR_CHAT:
-					puts("Chat rechazado\n");
+					//puts("Chat rechazado\n");
 					break;
 
 				default:
@@ -252,7 +258,7 @@ void *ejec_cliente(void *ptr)
 			}
 		}
 		/* acá debería revisar si hay msj pendientes en la cola */
-		/* Mensajes que preguntan chat */
+		/* Mensajes asincronicos*/
 		pthread_mutex_lock(&mutex_cola_msj);
 		if(msgrcv(ID_COLA, (struct msgbuf *) &buffer_cola, sizeof(buffer_cola.msj), mi_descriptor, IPC_NOWAIT) > 0)
 		{
@@ -271,7 +277,7 @@ void *ejec_cliente(void *ptr)
 			send(mi_descriptor, buffer_cola.msj, TAM, MSG_DONTWAIT);
 		}
 		pthread_mutex_unlock(&mutex_cola_msj);
-
+		usleep(100);
 	}
 	printf("hilo %lu finalizado\n", pthread_self());
 	//deregistrar_usuario(mi_descriptor);
@@ -282,7 +288,7 @@ void *ejec_cliente(void *ptr)
 /* esta verifica el msj recibido en el buffer y llama a la función correspondiente */
 int verificar_msj(char * buffer_entrada, int sock_id)
 {
-	char temp[TAM];
+	char temp[TAM], temp1[32], temp2[32], temp3[32];
 	strcpy(temp, buffer_entrada);
 
 	if (strcmp(temp, "exit\n") == 0)
@@ -293,8 +299,12 @@ int verificar_msj(char * buffer_entrada, int sock_id)
 
 	if (strstr(buffer_entrada,"CTRL HOLA") != NULL)
 	{
-		if (registrar_usuario(sock_id, strtok(temp," ")) == EXITO)
+		strcpy(temp1, strtok(temp," "));
+		if (registrar_usuario(sock_id, temp1) == EXITO)
+		{
+//			strcpy(ERROR_MSJ, temp1); 
 			return EXITO_REG_CLIENTE;
+		}
 		else
 			return ERROR_REG_CLIENTE;
 	}
@@ -326,17 +336,51 @@ int verificar_msj(char * buffer_entrada, int sock_id)
 
 	if (strstr(temp, "CHAT_OK") != NULL)
 	{
-		char temp1[32], temp2[32];
-		strcpy(temp1, strtok(temp, "|")); //solicitante
-		strtok(NULL, "|");
-		strcpy(temp2, strtok(NULL, "\n"); //solicitado
 		
+		strcpy(temp1, strtok(temp, "|"));	//solicitante
+		strcpy(temp3, strtok(NULL, "|"));	//respuesta
+		strcpy(temp2, strtok(NULL, "\n"));	//solicitado
+		if (responder_chat(temp1, temp2, temp3) == ERROR)
+			return 0;
+		printf("chat ok desde: %s hacia %s\n", temp1, temp2);
 		return EXITO_CHAT;
 	}
 
 	if (strstr(temp, "CHAT_NO") != NULL)
 		return ERROR_CHAT;
 	return 0;
+}
+
+/* manda un msj asincronico a la persona que inicio el chat */
+int responder_chat(char* n_origen, char* n_destino, char* respuesta)
+{
+	int s_origen, s_destino;
+	elem_cola buffer_cola;
+
+	pthread_mutex_lock(&mutex_listapt);
+	s_origen = obtener_id_nombre(n_origen);
+	s_destino = obtener_id_nombre(n_destino);
+	pthread_mutex_unlock(&mutex_listapt);
+
+	buffer_cola.tipo = s_origen;	//el msj de CTRL DALE o CTRL NO tiene que ir a quien inicia el chat
+
+	if (strstr(respuesta, "CHAT_OK") != NULL)
+		strcpy(buffer_cola.msj, "CTRL DALE");
+	else
+		strcpy(buffer_cola.msj, "CTRL NO");
+
+	strcat(buffer_cola.msj, " \"");
+	strcat(buffer_cola.msj, n_destino);
+	strcat(buffer_cola.msj, "\"\n");
+
+	pthread_mutex_lock(&mutex_cola_msj);
+	if(msgsnd(ID_COLA, (struct msgbuf *) &buffer_cola, sizeof(buffer_cola.msj), IPC_NOWAIT) != 0)
+	{
+		pthread_mutex_unlock(&mutex_cola_msj);
+		return ERROR;
+	}
+	pthread_mutex_unlock(&mutex_cola_msj);
+	return EXITO;
 }
 
 /* si el nombre como argumento es válido, registra al usuario */
@@ -412,10 +456,13 @@ int broadcast(int origen, char *msj)
 	lista_pt *n = (lista_pt *)malloc(sizeof(lista_pt));
 	if (n == NULL)
 		return ERROR;
+	pthread_mutex_lock(&mutex_listapt);
 	n = thread;
+	pthread_mutex_unlock(&mutex_listapt);
     while (n != NULL)
 	{
-        send(n->_id_socket_, msj, TAM, MSG_DONTWAIT);
+		if (n->_id_socket_ != origen)
+	        send(n->_id_socket_, msj, TAM, MSG_DONTWAIT);
         n = n->_next_;
     }
 	return EXITO;

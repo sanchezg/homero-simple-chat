@@ -95,6 +95,7 @@ void * exec_th_stdin(void *ptr)
 				break;
 		}
 		printf(PROMPT);
+		usleep(100);
 	}
 	return NULL;
 }
@@ -114,11 +115,10 @@ void * exec_th_socket(void *ptr)
 				case CHAT_CODE:
 					break;
 				default:
-					printf("MSJ recibido del server: %s ", buffer);
+					printf("MSJ recibido del server: %s", buffer);
 					break;
 			}
 		}
-
 		usleep(100);
 	}
 	return NULL;
@@ -165,7 +165,6 @@ int verificar_msj(char *buf)
 		printf("El usuario %s quiere iniciar chat, acepta? [SI|NO]\n", temp);
 		return CHAT_CODE;
 	}
-
 	return 0;
 }
 
