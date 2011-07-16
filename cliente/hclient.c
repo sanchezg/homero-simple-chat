@@ -95,7 +95,7 @@ void * exec_th_stdin(void *ptr)
 				break;
 		}
 		printf(PROMPT);
-		usleep(100);
+//		usleep(100);
 	}
 	return NULL;
 }

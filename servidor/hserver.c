@@ -212,8 +212,8 @@ void *ejec_cliente(void *ptr)
 					}
 					/*memset(resp_servidor, '\0', TAM);
 					strcpy(resp_servidor, "CTRL ENTRO \"");
-					strcpy(resp_servidor, ERROR_MSJ);
-					strcpy(resp_servidor, "\"\n");
+					strcat(resp_servidor, ERROR_MSJ);
+					strcat(resp_servidor, "\"\n");
 					broadcast(mi_descriptor, resp_servidor);*/
 					break;
 
@@ -277,7 +277,7 @@ void *ejec_cliente(void *ptr)
 			send(mi_descriptor, buffer_cola.msj, TAM, MSG_DONTWAIT);
 		}
 		pthread_mutex_unlock(&mutex_cola_msj);
-		usleep(100);
+//		usleep(100);
 	}
 	printf("hilo %lu finalizado\n", pthread_self());
 	//deregistrar_usuario(mi_descriptor);
