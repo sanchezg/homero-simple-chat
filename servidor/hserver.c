@@ -16,12 +16,12 @@
 int SERVER_ACTIVO, ID_COLA;
 char * ERROR_MSJ;
 key_t K_COLA;
-//elem_cola COLA_GRAL;
 
 lista_pt *thread = NULL;
 
 pthread_mutex_t mutex_listapt = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_archivo_clientes = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_archivo_chats = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_msj = PTHREAD_MUTEX_INITIALIZER;
 
 void sigint_handler(int sig)
@@ -210,11 +210,6 @@ void *ejec_cliente(void *ptr)
 						perror("write");
 						exit(EXIT_FAILURE);
 					}
-					/*memset(resp_servidor, '\0', TAM);
-					strcpy(resp_servidor, "CTRL ENTRO \"");
-					strcat(resp_servidor, ERROR_MSJ);
-					strcat(resp_servidor, "\"\n");
-					broadcast(mi_descriptor, resp_servidor);*/
 					break;
 
 				case ERROR_REG_CLIENTE:
@@ -252,6 +247,16 @@ void *ejec_cliente(void *ptr)
 					//puts("Chat rechazado\n");
 					break;
 
+				case EXITO_MSG:
+					break;
+				case ERROR_MSG:
+					printf("Error al enviar mensaje\n");
+					break;
+				case EXITO_SILENCIO:
+					printf("Conversacion terminada\n");
+				case ERROR_SILENCIO:
+					break;
+
 				default:
 					printf("Msj recibido: %s",buffer);
 					break;
@@ -263,25 +268,15 @@ void *ejec_cliente(void *ptr)
 		if(msgrcv(ID_COLA, (struct msgbuf *) &buffer_cola, sizeof(buffer_cola.msj), mi_descriptor, IPC_NOWAIT) > 0)
 		{
 			pthread_mutex_unlock(&mutex_cola_msj);
-			//printf("Hay un msj para mí: %s \n", buffer_cola.msj);
 			send(mi_descriptor, buffer_cola.msj, TAM, MSG_DONTWAIT);
 		}
 		pthread_mutex_unlock(&mutex_cola_msj);
-
-		/* Mensajes de chat, notar el tipo varía!! */
-		pthread_mutex_lock(&mutex_cola_msj);
-		if(msgrcv(ID_COLA, (struct msgbuf *) &buffer_cola, sizeof(buffer_cola.msj), mi_descriptor*100, IPC_NOWAIT) > 0)
-		{
-			pthread_mutex_unlock(&mutex_cola_msj);
-			//printf("Hay un msj para mí: %s \n", buffer_cola.msj);
-			send(mi_descriptor, buffer_cola.msj, TAM, MSG_DONTWAIT);
-		}
-		pthread_mutex_unlock(&mutex_cola_msj);
-//		usleep(100);
 	}
-	printf("hilo %lu finalizado\n", pthread_self());
+
 	//deregistrar_usuario(mi_descriptor);
 	list_remove(list_search_d2(&thread, mi_descriptor));
+	printf("hilo %lu finalizado\n", pthread_self());
+
 	return NULL;
 }
 
@@ -313,7 +308,17 @@ int verificar_msj(char * buffer_entrada, int sock_id)
 	{
 		strtok(temp, "\"");
 		strcpy(temp, strtok(NULL, "\""));
-		printf("nombre a buscar: %s\n", temp);
+		//printf("nombre a buscar: %s\n", temp);
+
+		pthread_mutex_lock(&mutex_archivo_chats);
+		if(verificar_chat(temp, obtener_nombre_id(sock_id)) == EXITO)
+		{
+			pthread_mutex_unlock(&mutex_archivo_chats);
+			strcpy(ERROR_MSJ, "Error, ya existe el chat\n");
+			return ERROR_CL_CHARL;
+		}
+		pthread_mutex_unlock(&mutex_archivo_chats);
+
 		pthread_mutex_lock(&mutex_archivo_clientes);
 		if (archivo_buscar("clientes", temp) == EXITO)
 		{
@@ -336,20 +341,135 @@ int verificar_msj(char * buffer_entrada, int sock_id)
 
 	if (strstr(temp, "CHAT_OK") != NULL)
 	{
-		
 		strcpy(temp1, strtok(temp, "|"));	//solicitante
 		strcpy(temp3, strtok(NULL, "|"));	//respuesta
 		strcpy(temp2, strtok(NULL, "\n"));	//solicitado
+
 		if (responder_chat(temp1, temp2, temp3) == ERROR)
 			return 0;
+
+		pthread_mutex_lock(&mutex_archivo_chats);
+		if (registrar_chat(temp1, temp2) == ERROR)
+		{
+			pthread_mutex_unlock(&mutex_archivo_chats);
+			return 0;
+		}
+		pthread_mutex_unlock(&mutex_archivo_chats);
+
 		printf("chat ok desde: %s hacia %s\n", temp1, temp2);
 		return EXITO_CHAT;
 	}
 
 	if (strstr(temp, "CHAT_NO") != NULL)
+	{
+		strcpy(temp1, strtok(temp, "|"));	//solicitante
+		strcpy(temp3, strtok(NULL, "|"));	//respuesta
+		strcpy(temp2, strtok(NULL, "\n"));	//solicitado
+		if (responder_chat(temp1, temp2, temp3) == ERROR)
+			return 0;
+		printf("chat rechazado desde: %s hacia %s\n", temp1, temp2);
 		return ERROR_CHAT;
+	}
+
+	if (strstr(temp, " MSG ") != NULL)
+	{
+		strcpy(temp1, strtok(temp, " "));	//origen (yo)
+		strtok(NULL, " ");					//MSG
+		strcpy(temp2, strtok(NULL, " "));	//destino
+		strcpy(temp3, strtok(NULL, "\n"));	//msj
+
+		pthread_mutex_lock(&mutex_archivo_chats);
+		if (verificar_chat(temp1, temp2) == ERROR)
+		{
+			//printf("no deberia imprimir esto\n");
+			pthread_mutex_unlock(&mutex_archivo_chats);
+			//strcpy(ERROR_MSJ, "Chat no registrado\n");
+			return ERROR_MSG;
+		}
+		pthread_mutex_unlock(&mutex_archivo_chats);
+
+		if (enviar_msj(temp1, temp2, temp3) == ERROR)
+			return ERROR_MSG;
+		printf("desde %s hacia %s el msj %s\n", temp1, temp2, temp3);
+		return EXITO_MSG;
+	}
+
+	if (strstr(temp, "CTRL SILENCIO") != NULL)
+	{
+		strtok(temp, "\"");
+		strcpy(temp1, strtok(NULL, "\""));
+		if(archivo_borrar("chats", temp1) == EXITO)
+			return EXITO_SILENCIO;
+		return ERROR_SILENCIO;
+	}
+
 	return 0;
 }
+
+int verificar_chat(char* origen, char* destino)
+{
+	char temp[32*2];
+
+	strcpy(temp, origen);
+	strcat(temp, "<>");
+	strcat(temp, destino);
+	strcat(temp, "\n");
+	
+	if(archivo_buscar("chats", temp) == EXITO)
+		return EXITO;
+
+	strcpy(temp, destino);
+	strcat(temp, "<>");
+	strcat(temp, origen);
+//	strcat(temp, "\n");
+	
+	if(archivo_buscar("chats", temp) == EXITO)
+		return EXITO;
+
+	return ERROR;
+}
+
+int registrar_chat(char* origen, char* destino)
+{
+	char temp[32*2];
+
+	strcpy(temp, origen);
+	strcat(temp, "<>");
+	strcat(temp, destino);
+
+	if (archivo_agregar("chats", temp) == EXITO)
+		return EXITO;
+	return ERROR;
+}
+
+/* manda el msj de chat desde origen al destino */
+int enviar_msj(char* n_origen, char* n_destino, char* mensaje)
+{
+	int s_origen, s_destino;
+	elem_cola buffer_cola;
+
+	pthread_mutex_lock(&mutex_listapt);
+	s_origen = obtener_id_nombre(n_origen);
+	s_destino = obtener_id_nombre(n_destino);
+	pthread_mutex_unlock(&mutex_listapt);
+
+	buffer_cola.tipo = s_destino;
+
+	strcpy(buffer_cola.msj, n_origen);
+	strcat(buffer_cola.msj, " RESPMSG ");
+	strcat(buffer_cola.msj, mensaje);
+	strcat(buffer_cola.msj, "\n");
+
+	pthread_mutex_lock(&mutex_cola_msj);
+	if(msgsnd(ID_COLA, (struct msgbuf *) &buffer_cola, sizeof(buffer_cola.msj), IPC_NOWAIT) != 0)
+	{
+		pthread_mutex_unlock(&mutex_cola_msj);
+		return ERROR;
+	}
+	pthread_mutex_unlock(&mutex_cola_msj);
+
+	return EXITO;
+}	
 
 /* manda un msj asincronico a la persona que inicio el chat */
 int responder_chat(char* n_origen, char* n_destino, char* respuesta)
@@ -386,6 +506,7 @@ int responder_chat(char* n_origen, char* n_destino, char* respuesta)
 /* si el nombre como argumento es válido, registra al usuario */
 int registrar_usuario(int id, char *nombre)
 {
+	char temp[32];
 	pthread_mutex_lock(&mutex_archivo_clientes);
 	if (archivo_buscar("clientes",nombre) == ERROR) //pregunto por error porque no quiero que este en el archivo...
 	{
@@ -396,6 +517,11 @@ int registrar_usuario(int id, char *nombre)
 			if(lista_add_nombre(id, nombre) == ERROR)
 				return ERROR;
 			pthread_mutex_unlock(&mutex_listapt);
+			strcpy(temp, "CTRL ENTRO: \"");
+			strcat(temp, strtok(nombre, "\n"));
+			strcat(temp, "\"\n");
+			if(broadcast(id, temp) == EXITO)
+				return EXITO;
 			return EXITO;
 		}
 		else
@@ -447,6 +573,9 @@ void deregistrar_usuario(int descriptor)
 	pthread_mutex_lock(&mutex_archivo_clientes);
 	archivo_borrar("clientes", obtener_nombre_id(descriptor));
 	pthread_mutex_unlock(&mutex_archivo_clientes);
+	pthread_mutex_lock(&mutex_listapt);
+	list_remove(list_search_d2(&thread, descriptor));
+	pthread_mutex_unlock(&mutex_listapt);
 	return;
 }
 
@@ -594,7 +723,7 @@ int archivo_borrar(char* nombre_archivo, char* texto)
 
 	//ahora ir hasta el final...
 	while (fgets(str, TAMNOM, pf) != NULL)
-		strcpy(temp1, str);		//en temp1 me quedan todos los nombres
+		strcat(temp1, str);		//en temp1 me quedan todos los nombres
 
 	fclose(pf);		//Primero, borrar el archivo...
 	if(remove(nombre_archivo) != 0 )

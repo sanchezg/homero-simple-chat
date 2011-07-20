@@ -32,6 +32,9 @@
 /* Con estos msj responde el receptor que acepta o rechaza la conversacion. */
 #define EXITO_CHAT 30
 #define ERROR_CHAT 31
+/* Msj para enviar y recibir msj de chat */
+#define MSG_SEND 32
+#define MSG_RECV 33
 
 #define ERROR_MSJ -1
 

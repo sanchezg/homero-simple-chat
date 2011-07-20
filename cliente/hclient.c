@@ -88,7 +88,11 @@ void * exec_th_stdin(void *ptr)
 				write(mi_socket, MSJ_RETORNO, TAM);
 				break;
 			case ERROR_CHAT:
-				write(mi_socket, "CHAT_NO\n", TAM);
+				write(mi_socket, MSJ_RETORNO, TAM);
+				break;
+			case MSG_SEND:
+				//printf ("voy a mandar %s\n", MSJ_RETORNO);
+				write(mi_socket, MSJ_RETORNO, TAM);
 				break;
 			default:
 				write(mi_socket, buffer, TAM);
@@ -114,6 +118,9 @@ void * exec_th_socket(void *ptr)
 			{
 				case CHAT_CODE:
 					break;
+				case MSG_RECV:
+					printf("%s\n", MSJ_RETORNO);
+					break;
 				default:
 					printf("MSJ recibido del server: %s", buffer);
 					break;
@@ -126,7 +133,7 @@ void * exec_th_socket(void *ptr)
 
 int verificar_msj(char *buf)
 {
-	char temp[TAM];
+	char temp[TAM], temp1[32];
 	strcpy(temp, buf);
 
 	if (strcmp(temp, "exit\n") == 0)
@@ -154,7 +161,16 @@ int verificar_msj(char *buf)
 		return EXITO_CHAT;
 	}
 	if (strcmp(temp, "NO\n") == 0)
+	{
+		memset(temp, '\0', TAM);
+		strcpy(temp, MSJ_RETORNO);
+		strcat(temp, "|CHAT_NO|");
+		strcat(temp, NICKNAME);
+		strcat(temp, "\n");
+		memset(MSJ_RETORNO, '\0', TAM);
+		strcpy(MSJ_RETORNO, temp);
 		return ERROR_CHAT;
+	}
 
 	if (strstr(temp, "_CHAT|") != NULL)
 	{
@@ -165,6 +181,26 @@ int verificar_msj(char *buf)
 		printf("El usuario %s quiere iniciar chat, acepta? [SI|NO]\n", temp);
 		return CHAT_CODE;
 	}
+
+	if (strstr(temp, " RESPMSG ") != NULL)
+	{
+		strcpy(temp1, strtok(temp, " "));	//usuario origen
+		strcpy(MSJ_RETORNO, temp1);
+		strcat(MSJ_RETORNO, ": ");
+		strtok(NULL, " ");
+		strcat(MSJ_RETORNO, strtok(NULL, "\n"));
+		return MSG_RECV;
+	}
+
+	if (strstr(temp, "MSG") != NULL)
+	{
+		memset(MSJ_RETORNO, '\0', TAM);
+		strcpy(MSJ_RETORNO, NICKNAME);
+		strcat(MSJ_RETORNO, " ");
+		strcat(MSJ_RETORNO, temp);
+		return MSG_SEND;
+	}
+
 	return 0;
 }
 

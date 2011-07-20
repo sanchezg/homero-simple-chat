@@ -22,6 +22,10 @@
 #define ERROR_CL_CHARL	21
 #define EXITO_CHAT	22
 #define ERROR_CHAT	23
+#define EXITO_MSG	24
+#define ERROR_MSG	25
+#define EXITO_SILENCIO	26
+#define ERROR_SILENCIO	27
 #define EXITO_VER_CONV	30
 #define ERROR_VER_CONV	31
 #define ERROR_CLIENTE_INC 41
@@ -60,12 +64,16 @@ int verificar_msj(char *, int);
 int preguntar_chat(int, char*);
 int responder_chat(char*, char*, char*);
 int broadcast(int, char*);
+int enviar_msj(char*, char*, char*);
+int registrar_chat(char*, char*);
+int verificar_chat(char*, char*);
 
 int archivo_agregar(char*, char*);
 char* archivo_listar(char*);
 int archivo_buscar(char *, char *);
 int archivo_borrar(char*, char*);
 int registrar_usuario(int, char *);
+void deregistrar_usuario(int);
 
 void broadcast_clientes(char *);
 char * listar_clientes(int);
